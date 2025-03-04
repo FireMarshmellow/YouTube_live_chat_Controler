@@ -6,7 +6,6 @@ import commandhandler
 
 app = Flask(__name__)
 
-DATA_FILE = "data.json"
 SECRETS_FILE = 'secrets.json'
 COMMANDS_FILE = 'commands.json'
 PLAQUES_FILE = 'plaques.json'
@@ -34,14 +33,14 @@ def save_secrets(secrets):
 
 # Function to load data from JSON
 def load_data():
-    if not os.path.exists(DATA_FILE):
+    if not os.path.exists(PLAQUES_FILE):
         return []  # Return empty list if file does not exist
-    with open(DATA_FILE, "r") as file:
+    with open(PLAQUES_FILE, "r") as file:
         return json.load(file)
 
 # Function to save data to JSON
 def save_data(data):
-    with open(DATA_FILE, "w") as file:
+    with open(PLAQUES_FILE, "w") as file:
         json.dump(data, file, indent=4)
 
 # Function to update data in JSON
@@ -74,6 +73,7 @@ def manage_secrets():
     if request.method == 'POST':
         secrets['api_key'] = request.form['api_key']
         secrets['api_key_backup'] = request.form['api_key_backup']
+        secrets['channel_id'] = request.form['channel_id']
         secrets['video_id'] = request.form['video_id']
         secrets['access_token'] = request.form['access_token']
         secrets['ha_url'] = request.form['ha_url']
