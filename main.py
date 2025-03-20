@@ -36,8 +36,8 @@ def handle_message(display_name, message_text, is_superchat=False):
     person_info = check_name_in_data(display_name)
     if person_info:
         threading.Thread(
-            target=plaque_board_controller.set_leds,
-            args=(person_info["Leds"], person_info["Leds_colour"], 10),
+            target=plaque_board_controller.set_leds_for_user,
+            args=(person_info['name'], 5),  # Duration is set to 10 as in the original code
         ).start()
 
     iscommand = False
@@ -49,10 +49,17 @@ def handle_message(display_name, message_text, is_superchat=False):
                 message_text.lower(), display_name, is_superchat
             )
             break
-
+    if message_text.lower().startswith("!dec"):
+        dec_text = message_text[5:].strip()
+        if dec_text:
+            ttstext = f"{display_name} said: {dec_text}"
+            threading.Thread(target=gotts, args=(ttstext,False,), daemon=True).start()
+        return
+    
     if not iscommand:
         ttstext = f"{display_name} said: {message_text}"
         threading.Thread(target=gotts, args=(ttstext,), daemon=True).start()
+
 
 
 class TwitchBot(commands.Bot):
@@ -143,21 +150,37 @@ def get_live_chat_id(video_id, secrets):
             )
 
             if live_chat_id:
-                print(f"Successfully retrieved live chat ID using API key: {api_key}")
+                #print(f"Successfully retrieved live chat ID using API key: {api_key}")
                 return live_chat_id
 
         except HttpError as e:
             last_exception = e
-            print(f"API key {api_key} failed with error: {e}")
+            #print(f"API key {api_key} failed with error: {e}")
         except Exception as e:
             last_exception = e
-            print(f"Unexpected error with API key {api_key}: {e}")
+            #print(f"Unexpected error with API key {api_key}: {e}")
 
     # If all API keys fail
     if last_exception:
         print(f"All API keys failed. Last error: {last_exception}")
     
     return None
+
+def input_with_timeout(prompt, timeout=10):
+    result = [None]
+
+    def get_input():
+        result[0] = input(prompt).strip()
+
+    input_thread = threading.Thread(target=get_input)
+    input_thread.daemon = True
+    input_thread.start()
+    input_thread.join(timeout)
+    
+    if input_thread.is_alive():
+        print("\nTimeout reached. Continuing...")
+        return None
+    return result[0]
 
 def start_twitch_app():
     bot.run()
@@ -172,7 +195,7 @@ if __name__ == '__main__':
 
         if not video_id:
             print("No active live stream found.")
-            video_id = input("Please enter a video ID manually: ").strip()
+            video_id = input_with_timeout("Please enter a video ID manually: ", timeout=10)
 
         if not video_id:
             print("No valid video ID provided.")

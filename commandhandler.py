@@ -70,13 +70,13 @@ def execute_command(command, display_name, is_superchat=False):
 
         # Execute the command
         print(f"Executing command {command} from {display_name}")
-        perform_command_action(command)
+        perform_command_action(command, display_name)
         last_executed[base_command] = current_time
     else:
         print(f"Command '{command}' is not enabled or does not exist.")
 
 # Function to perform the command action (like playing a sound or controlling devices)
-def perform_command_action(command):
+def perform_command_action(command, displayname):
     if command.startswith("!sound_"):
         sound_name = command.split("!sound_")[1]
         sound_name = sound_name.lower()
@@ -84,6 +84,9 @@ def perform_command_action(command):
         play_sound(sound_name)
     elif command == "!bubbles":
         Bubbles()
+    elif command == "!blow":
+        if displayname == 'pyrohouz':
+            Bubbles()
     elif command.startswith("!desk"):
         try:
             # Remove the command part and extract the number

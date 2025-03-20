@@ -80,7 +80,7 @@ def manage_secrets():
         secrets['video_id'] = request.form['video_id']
         secrets['access_token'] = request.form['access_token']
         secrets['ha_url'] = request.form['ha_url']
-        secrets['plaque_board_BOARD_IP'] = request.form['plaque_board_BOARD_IP']
+        secrets['board_ip'] = request.form['board_ip']
         save_secrets(secrets)
         return redirect(url_for('manage_secrets'))
 

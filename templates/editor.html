@@ -198,6 +198,8 @@
         <a href="{{ url_for('editor') }}" class="btn btn-outline-secondary mb-3">PlaqueBoard</a>
         <a href="{{ url_for('manage_secrets') }}" class="btn btn-outline-secondary mb-3">Secrets</a>
         <a href="{{ url_for('manage_commands') }}" class="btn btn-outline-secondary mb-3">Commands</a>
+        <!-- Skip TTS Button -->
+        <button class="btn btn-danger mb-3" onclick="skipTTS()">Skip Current TTS</button>
     </div>
     <div id="toolbar">
         <!-- Removed Save/Load buttons and file input -->
@@ -609,5 +611,17 @@
             .catch(error => console.error('Error:', error));
         }
     </script>
+    <script>
+        function skipTTS() {
+                    fetch('/skip_tts', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log('TTS Skipped:', data);
+                        })
+                        .catch(error => {
+                            console.error('Error skipping TTS:', error);
+                        });
+                };
+        </script>
 </body>
 </html>

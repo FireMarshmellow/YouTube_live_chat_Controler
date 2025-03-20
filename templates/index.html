@@ -19,10 +19,25 @@
         <a href="{{ url_for('manage_commands') }}" class="btn btn-outline-secondary mb-3">
             Commands
         </a>
+        <!-- Skip TTS Button -->
+        <button class="btn btn-danger mb-3" onclick="skipTTS()">Skip Current TTS</button>
 <div>
-        <img width="800" src="https://imgproxy.fourthwall.com/LX2rwu6vku3svJ-otu_waOo0aqBrbTb8zKhE5Q9wuFY/w:240/sm:1/enc/Y2MxMjhiMDY0ZWE4/YmMyYZgI5YYNEdwl/rHYlp-joVx3aufzb/h-CXKzg6n7bx_UwJ/O4SnxBKh9I5Ui8H8/hAtepclE31OLXtPH/JtIouxhM87jDlJQy/d05Vh3aA5GijJvfr/MVi6C6sNILkl3IqY/t76-W8JDul91OGUG/h7x4oY-aN_fhWlFj/9EU-AOYNLsO4prSc/N1pRqYVW1gu1pMwu/IpHNvCUtla2VFSoP/PwsjkCpHB9cnqr4m/1E0SQ5FtFaBzNRUd.webp">
+        <img width="800" src="https://i.ibb.co/hJV3HZm9/mellowfood.png">
     </div> 
     Something will be here in a next version, but for now only this logo.   
     </div>
         </body>
         </html>
+
+<script>
+function skipTTS() {
+            fetch('/skip_tts', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('TTS Skipped:', data);
+                })
+                .catch(error => {
+                    console.error('Error skipping TTS:', error);
+                });
+        };
+</script>
