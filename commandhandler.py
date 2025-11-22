@@ -1,14 +1,11 @@
 import re
-import os
 import time
-from datetime import datetime, timedelta
-from homeassistant_controls import Bubbles, Birthdaypopper, Birthdaycandle, adjust_desk_height, PistonUp, PistonDown
-from sound_board import play_sound
-import json
 
-access_hierarchy = ["regular", "patron", "superchat"]
-COMMANDS_FILE = 'commands.json'
-DATA_FILE = "data.json"
+from homeassistant_controls import Bubbles, PistonDown, PistonUp, adjust_desk_height
+from sound_board import play_sound
+from storage import load_commands, load_plaques
+
+access_hierarchy = ["regular", "patreon", "superchat"]
 
 
 def check_access(user_status, command_level):
@@ -21,11 +18,6 @@ def check_access(user_status, command_level):
         else 0
     )
     return user_level >= command_level_index
-
-# Load commands from JSON file
-def load_commands():
-    with open(COMMANDS_FILE, 'r') as file:
-        return json.load(file)
 
 # Function to get access levels
 def get_access_levels():
@@ -113,17 +105,8 @@ def perform_command_action(command, displayname):
     else:
         print(f"No action defined for command: {command}")
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return []  # Return empty list if file does not exist
-    with open(DATA_FILE, "r") as file:
-        return json.load(file)
-
 def load_supporters():
-    # Assuming supporters data is stored in plaques.json.
-    # If you have another file for patreon users, update the path accordingly.
-    with open("plaques.json", "r") as file:
-        return json.load(file)
+    return load_plaques()
 
 # Function to get user access level
 def get_user_access_level(display_name, is_superchat=False):

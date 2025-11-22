@@ -1,31 +1,25 @@
 import requests
 import time
-import json
-import os
 
-# Load secrets from the JSON file
-SECRETS_FILE = 'secrets.json'
+from storage import load_secrets
 
-def load_secrets():
-    if not os.path.exists(SECRETS_FILE):
-        raise FileNotFoundError(f"Secrets file '{SECRETS_FILE}' not found.")
-    with open(SECRETS_FILE, 'r') as file:
-        return json.load(file)
 
-# Load secrets
-secrets = load_secrets()
-
-# Home Assistant details
-ACCESS_TOKEN = secrets['access_token']
-HA_URL = secrets['ha_url']
-HEADERS = {
-    'Authorization': f'Bearer {ACCESS_TOKEN}',
-    'Content-Type': 'application/json',
-}
+def _get_connection_details():
+    secrets = load_secrets()
+    access_token = secrets.get("access_token")
+    ha_url = secrets.get("ha_url")
+    if not access_token or not ha_url:
+        raise RuntimeError("Home Assistant credentials are missing from secrets.json.")
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    return ha_url, headers
 
 def call_ha_service(service, data):
-    url = f"{HA_URL}/api/services/{service}"
-    response = requests.post(url, headers=HEADERS, json=data)
+    ha_url, headers = _get_connection_details()
+    url = f"{ha_url}/api/services/{service}"
+    response = requests.post(url, headers=headers, json=data, timeout=10)
     if response.status_code == 200:
         print(f"Service '{service}' called successfully.")
     else:

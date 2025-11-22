@@ -1,16 +1,7 @@
 import requests
 import time
-import json
-import os
 
-SECRETS_FILE = 'secrets.json'
-
-# Function to load data from JSON
-def load_secrets():
-    if not os.path.exists(SECRETS_FILE):
-        return []  # Return empty list if file does not exist
-    with open(SECRETS_FILE, "r") as file:
-        return json.load(file)
+from storage import find_plaque, load_secrets
 
 
 def send_request_with_retry(api_endpoint, payload, max_retries=3, delay=1):
@@ -33,7 +24,7 @@ def send_request_with_retry(api_endpoint, payload, max_retries=3, delay=1):
 
 def set_leds(led_indices, color, timehere):
     secrets = load_secrets()
-    led_indices_new = list(map(int, led_indices.split(",")))
+    led_indices_new = [int(index) for index in led_indices.split(",") if index.strip()]
     api_endpoint = f"" + str(secrets['board_ip']) + "/json/state"
     payload = {"seg": {"id": 0, "i": []}}
 
@@ -58,20 +49,7 @@ def set_leds(led_indices, color, timehere):
 def set_leds_for_user(display_name, duration=5):
     """Trigger LEDs for a user based on their display name"""
     try:
-        # Load plaques from file
-        if os.path.exists('plaques.json'):
-            with open('plaques.json', 'r') as f:
-                plaques = json.load(f)
-        else:
-            return False
-
-        # Find matching plaque
-        matching_plaque = next(
-            (plaque for plaque in plaques if 
-                plaque.get('YT_Name', '').lower() == display_name.lower() or 
-                plaque.get('twitchusername', '').lower() == display_name.lower()), 
-            None
-        )
+        matching_plaque = find_plaque(display_name)
 
         if matching_plaque:
             # Get color and convert from hex

@@ -1,68 +1,50 @@
-import json
+import os
+import threading
+import time
+from typing import Optional
+
 import requests
-from flask import Flask, request, render_template, redirect, url_for, jsonify
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from twitchio.ext import commands
-import time
-import os
-import threading
+
 import commandhandler
 import plaque_board_controller
+from app import app as flask_app
+from storage import find_plaque, load_commands, load_secrets, save_secrets
 from tts_module import gotts
-import app
 
-def save_secrets(secrets):
-    with open("secrets.json", 'w') as file:
-        json.dump(secrets, file, indent=4)
+CHAT_POLL_INTERVAL = 5  # seconds between YouTube chat polls
+def handle_message(display_name: str, message_text: str, is_superchat: bool = False) -> None:
+    """Route incoming chat messages to commands, LEDs, and TTS."""
+    if not display_name or not message_text:
+        return
 
-def load_secrets():
-    with open("secrets.json", 'r') as file:
-        return json.load(file)
+    normalized_text = message_text.strip()
+    normalized_lower = normalized_text.lower()
 
-secrets = load_secrets()
-
-def load_json_data():
-    with open("plaques.json", "r") as file:
-        return json.load(file)
-
-
-def check_name_in_data(display_name):
-    if not display_name:
-        return None
-    data = load_json_data()
-    for person in data:
-        if person["YT_Name"] == display_name or person.get("twitchusername") == display_name:
-            return person
-    return None
-
-def handle_message(display_name, message_text, is_superchat=False):
-    person_info = check_name_in_data(display_name)
-    if person_info:
+    if find_plaque(display_name):
         threading.Thread(
             target=plaque_board_controller.set_leds_for_user,
-            args=(person_info['name'], 5),  # Duration is set to 10 as in the original code
+            args=(display_name, 5),
+            daemon=True,
         ).start()
 
-    iscommand = False
-    commands = app.load_commands()
-    for base_command in commands.keys():
-        if base_command in message_text.lower():
-            iscommand = True
-            commandhandler.execute_command(
-                message_text.lower(), display_name, is_superchat
-            )
-            break
-    if message_text.lower().startswith("!dec"):
-        dec_text = message_text[5:].strip()
+    if normalized_lower.startswith("!dec"):
+        dec_text = normalized_text[5:].strip()
         if dec_text:
             ttstext = f"{display_name} said: {dec_text}"
-            threading.Thread(target=gotts, args=(ttstext,False,), daemon=True).start()
+            threading.Thread(target=gotts, args=(ttstext, False), daemon=True).start()
         return
-    
-    if not iscommand:
-        ttstext = f"{display_name} said: {message_text}"
-        threading.Thread(target=gotts, args=(ttstext,), daemon=True).start()
+
+    commands = load_commands()
+    for base_command in commands.keys():
+        if base_command in normalized_lower:
+            commandhandler.execute_command(normalized_lower, display_name, is_superchat)
+            return
+
+    ttstext = f"{display_name} said: {normalized_text}"
+    threading.Thread(target=gotts, args=(ttstext,), daemon=True).start()
 
 
 
@@ -79,11 +61,8 @@ class TwitchBot(commands.Bot):
         handle_message(message.author.name, message.content)
 
 
-def refresh_twitch_oauth_token(secrets):
-    """
-    Uses the stored refresh token to get a fresh access token,
-    then writes both access_token and new refresh_token back to secrets.json.
-    """
+def refresh_twitch_oauth_token(secrets: dict) -> Optional[str]:
+    """Refresh the Twitch token using the stored refresh token."""
     client_id     = secrets.get("TWITCH_CLIENT_ID")
     client_secret = secrets.get("TWITCH_CLIENT_SECRET")
     refresh_token = secrets.get("TWITCH_REFRESH_TOKEN")
@@ -99,7 +78,7 @@ def refresh_twitch_oauth_token(secrets):
         "client_secret": client_secret
     }
 
-    resp = requests.post(url, params=params)
+    resp = requests.post(url, params=params, timeout=10)
     if resp.status_code == 200:
         data = resp.json()
         new_access  = data["access_token"]
@@ -115,38 +94,42 @@ def refresh_twitch_oauth_token(secrets):
         print(f"Failed to refresh Twitch token: {resp.status_code} {resp.text}")
         return secrets.get("TWITCH_OAUTH_TOKEN")
 
-# Function to get live chat messages from YouTube and execute commands
-def print_live_chat_messages(live_chat_id):
+def listen_to_live_chat(live_chat_id: str) -> None:
+    """Continuously poll YouTube live chat and forward the messages."""
     secrets = load_secrets()
     youtube = build('youtube', 'v3', developerKey=secrets['api_key'])
-    request = youtube.liveChatMessages().list(liveChatId=live_chat_id, part='id,snippet,authorDetails')
-    first_request = True
+    request = youtube.liveChatMessages().list(
+        liveChatId=live_chat_id,
+        part='id,snippet,authorDetails',
+    )
     processed_message_ids = set()
-    while True:
+
+    while request:
         try:
             response = request.execute()
-            if not first_request:
-                for item in response['items']:
-                    notacommand = True
-                    message_id = item['id']
-                    if message_id in processed_message_ids:
-                        continue
-                    processed_message_ids.add(message_id)
-                    message_text = item['snippet']['displayMessage']
-                    display_name = item['authorDetails']['displayName']
-                    is_superchat = item['snippet'].get('superChatDetails') is not None
-                    handle_message(display_name, message_text, is_superchat)
-            time.sleep(5)
-            first_request = False
-            request = youtube.liveChatMessages().list_next(request, response)
-            if not request:
-                print("No more live chat messages available.")
-                break
         except HttpError as e:
             print(f"Error retrieving live chat messages: {e}")
             break
 
-def get_live_video_id(api_key, channel_id):
+        for item in response.get('items', []):
+            message_id = item['id']
+            if message_id in processed_message_ids:
+                continue
+
+            processed_message_ids.add(message_id)
+            message_text = item['snippet']['displayMessage']
+            display_name = item['authorDetails']['displayName']
+            is_superchat = item['snippet'].get('superChatDetails') is not None
+            handle_message(display_name, message_text, is_superchat)
+
+        request = youtube.liveChatMessages().list_next(request, response)
+        if not request:
+            print("No more live chat messages available.")
+            break
+
+        time.sleep(CHAT_POLL_INTERVAL)
+
+def get_live_video_id(api_key: str, channel_id: str) -> Optional[str]:
     """
     Fetches the active live video ID from a given YouTube channel.
     Returns None if no live stream is found.
@@ -169,7 +152,7 @@ def get_live_video_id(api_key, channel_id):
     
     return None  # No live video found
 
-def get_live_chat_id(video_id, secrets):
+def get_live_chat_id(video_id: str, secrets: dict) -> Optional[str]:
     """
     Fetch the live chat ID for the given video.
     Falls back to API_KEY_Backup if the primary key fails.
@@ -206,7 +189,7 @@ def get_live_chat_id(video_id, secrets):
     
     return None
 
-def input_with_timeout(prompt, timeout=10):
+def input_with_timeout(prompt: str, timeout: int = 10) -> Optional[str]:
     result = [None]
 
     def get_input():
@@ -221,10 +204,6 @@ def input_with_timeout(prompt, timeout=10):
         print("\nTimeout reached. Continuing...")
         return None
     return result[0]
-
-def start_twitch_app():
-    bot.run()
-    pass
 
 if __name__ == '__main__':
     if not os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
@@ -241,21 +220,23 @@ if __name__ == '__main__':
             video_id = input_with_timeout("Please enter a video ID manually: ", timeout=10)
 
         if not video_id:
-            print("No valid video ID provided.")
-            
-
-        live_chat_id = get_live_chat_id(video_id, secrets)
-
-        if live_chat_id:
-            print(f"Found live chat for video {video_id}. Printing messages...")
-            threading.Thread(target=print_live_chat_messages, args=(live_chat_id,), daemon=True).start()
+            print("No valid video ID provided; skipping YouTube chat.")
         else:
-            print("Live chat not found for this video. Disable Youtube Chat.")
+            live_chat_id = get_live_chat_id(video_id, secrets)
+
+            if live_chat_id:
+                print(f"Found live chat for video {video_id}. Listening for messages...")
+                threading.Thread(target=listen_to_live_chat, args=(live_chat_id,), daemon=True).start()
+            else:
+                print("Live chat not found for this video. Disable Youtube Chat.")
 
         # Start Twitch bot
-        bot = TwitchBot(refreshed_token, secrets["TWITCH_CHANNEL"])
-        threading.Thread(target=start_twitch_app, args=(), daemon=True).start()
+        if refreshed_token:
+            twitch_bot = TwitchBot(refreshed_token, secrets["TWITCH_CHANNEL"])
+            threading.Thread(target=twitch_bot.run, daemon=True).start()
+        else:
+            print("No Twitch token available; skipping Twitch bot startup.")
     # Run the Flask app
-    # app = Flask(__name__)
-    # app.secret_key = 'supersecretkey'
-    app.run()
+    # flask_app = Flask(__name__)
+    # flask_app.secret_key = 'supersecretkey'
+    flask_app.run()

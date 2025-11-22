@@ -1,68 +1,18 @@
-from flask import Flask, request, render_template, redirect, url_for, jsonify, send_from_directory
-import json
-import os
+from flask import Flask, request, render_template, redirect, url_for, jsonify
 from plaque_board_controller import set_leds
 import commandhandler
 import tts_module
+from storage import (
+    load_commands,
+    save_commands,
+    load_secrets,
+    save_secrets,
+    load_plaques,
+    save_plaques,
+    update_plaque,
+)
 
 app = Flask(__name__)
-
-SECRETS_FILE = 'secrets.json'
-COMMANDS_FILE = 'commands.json'
-PLAQUES_FILE = 'plaques.json'
-
-def load_commands():
-    with open(COMMANDS_FILE, 'r') as file:
-        return json.load(file)
-
-# Save commands to JSON file
-def save_commands(commands):
-    with open(COMMANDS_FILE, 'w') as file:
-        json.dump(commands, file, indent=4)
-
-# Function to load data from JSON
-def load_secrets():
-    if not os.path.exists(SECRETS_FILE):
-        return []  # Return empty list if file does not exist
-    with open(SECRETS_FILE, "r") as file:
-        return json.load(file)
-
-# Save secrets to JSON file
-def save_secrets(secrets):
-    with open(SECRETS_FILE, 'w') as file:
-        json.dump(secrets, file, indent=4)
-
-# Function to load data from JSON
-def load_data():
-    if not os.path.exists(PLAQUES_FILE):
-        return []  # Return empty list if file does not exist
-    with open(PLAQUES_FILE, "r") as file:
-        return json.load(file)
-
-# Function to save data to JSON
-def save_data(data):
-    with open(PLAQUES_FILE, "w") as file:
-        json.dump(data, file, indent=4)
-
-# Function to update data in JSON
-def update_data(yt_name, leds_colour, leds):
-    data = load_data()
-    
-    # Check if the entry already exists (based on YT_Name)
-    for entry in data:
-        if entry["YT_Name"] == yt_name:
-            entry["Leds_colour"] = leds_colour
-            entry["Leds"] = leds
-            break
-    else:
-        # If no match is found, add a new entry
-        data.append({
-            "YT_Name": yt_name,
-            "Leds_colour": leds_colour,
-            "Leds": leds
-        })
-    
-    save_data(data)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -151,11 +101,11 @@ def editor():
         yt_name = request.form["YT_Name"]
         leds_colour = request.form["Leds_colour"]
         leds = request.form["Leds"]
-        update_data(yt_name, leds_colour, leds)
+        update_plaque(yt_name, leds_colour, leds)
         return redirect(url_for("editor"))
     
     # Load data for display
-    data = load_data()
+    data = load_plaques()
     return render_template("editor.html", data=data)
 
 @app.route("/edit", methods=["POST"])
@@ -166,14 +116,14 @@ def edit():
     leds = request.form["Leds"]
 
     # Load and update data
-    data = load_data()
+    data = load_plaques()
     for entry in data:
         if entry["YT_Name"] == original_yt_name:
             entry["YT_Name"] = yt_name
             entry["Leds_colour"] = leds_colour
             entry["Leds"] = leds
             break
-    save_data(data)
+    save_plaques(data)
 
     return redirect(url_for("editor"))
 
@@ -182,11 +132,11 @@ def delete():
     yt_name = request.json.get("YT_Name")
 
     # Load data and filter out the entry with the given YT_Name
-    data = load_data()
+    data = load_plaques()
     data = [entry for entry in data if entry["YT_Name"] != yt_name]
 
     # Save the updated data back to the JSON file
-    save_data(data)
+    save_plaques(data)
 
     return jsonify({"status": "success"})
 
@@ -194,12 +144,10 @@ def delete():
 def trigger_leds():
     try:
         print("DEBUG: trigger_leds endpoint called")
-        if os.path.exists(PLAQUES_FILE):
-            with open(PLAQUES_FILE, 'r') as f:
-                plaques = json.load(f)
-                print(f"DEBUG: Loaded {len(plaques)} plaques from file")
+        plaques = load_plaques()
+        if plaques:
+            print(f"DEBUG: Loaded {len(plaques)} plaques from file")
         else:
-            plaques = []
             print("DEBUG: No plaques file found")
 
         data = request.json
@@ -242,17 +190,12 @@ def trigger_leds():
 # New plaque-related routes
 @app.route('/plaques', methods=['GET'])
 def get_plaques():
-    if os.path.exists(PLAQUES_FILE):
-        with open(PLAQUES_FILE, 'r') as f:
-            data = json.load(f)
-        return jsonify(data)
-    return jsonify([])
+    return jsonify(load_plaques())
 
 @app.route('/plaques', methods=['POST'])
-def save_plaques():
+def store_plaques():
     data = request.get_json()
-    with open(PLAQUES_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    save_plaques(data)
     return jsonify({"status": "success"})
 
 @app.route('/plaque-editor')
