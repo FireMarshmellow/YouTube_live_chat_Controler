@@ -2,7 +2,7 @@ import re
 import os
 import time
 from datetime import datetime, timedelta
-from homeassistant_controls import Bubbles, Birthdaypopper, Birthdaycandle, adjust_desk_height
+from homeassistant_controls import Bubbles, Birthdaypopper, Birthdaycandle, adjust_desk_height, PistonUp, PistonDown
 from sound_board import play_sound
 import json
 
@@ -99,13 +99,17 @@ def perform_command_action(command, displayname):
             else:
                 print("No valid height specified for desk command.")
                 return
-            if 71 <= desired_height <= 120:
+            if 58 <= desired_height <= 123:
                 print(f"Adjusting desk to height: {desired_height} cm")
                 adjust_desk_height(desired_height)
             else:
                 print(f"Desired height {desired_height} is out of range. Must be between 71 and 120 cm.")
         except ValueError:
             print(f"Invalid desk height specified in command: {command}")
+    elif command == "!piston_up":
+        PistonUp()
+    elif command == "!piston_down":
+        PistonDown()
     else:
         print(f"No action defined for command: {command}")
 

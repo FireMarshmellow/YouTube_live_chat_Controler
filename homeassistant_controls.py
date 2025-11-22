@@ -32,9 +32,9 @@ def call_ha_service(service, data):
         print(f"Error calling service '{service}': {response.text}")
 
 def Bubbles():
-    entity_id = 'switch.bubble_machine_bubble_machine_10s'
+    entity_id = 'button.esphome_web_13e1fc_bubble_burst'
     print("Turning on the bubble machine...")
-    call_ha_service('switch/turn_on', {"entity_id": entity_id})
+    call_ha_service('button/press', {"entity_id": entity_id})
 
 def Birthdaypopper():
     entity_id = 'switch.happpy_bday_celebrate'
@@ -47,8 +47,8 @@ def Birthdaycandle():
     call_ha_service('switch/turn_on', {"entity_id": entity_id})
 
 def adjust_desk_height(desired_height):
-    STOP_ENTITY_ID = "cover.desk_desk"
-    SET_HEIGHT_ENTITY_ID = "number.desk_desk_height"
+    STOP_ENTITY_ID = "over.esphome_web_fdf034_desk"
+    SET_HEIGHT_ENTITY_ID = "number.esphome_web_fdf034_desk_height"
 
     def control_desk(stop_entity_id, set_height_entity_id, height):
         print("Stopping the desk...")
@@ -62,3 +62,13 @@ def adjust_desk_height(desired_height):
     control_desk(STOP_ENTITY_ID, SET_HEIGHT_ENTITY_ID, desired_height)
     time.sleep(1)
     control_desk(STOP_ENTITY_ID, SET_HEIGHT_ENTITY_ID, desired_height)
+
+def PistonDown():
+    entity_id = 'button.piston_move_down'
+    print("Setting piston to bottom (zero)...")
+    call_ha_service('button/press', {"entity_id": entity_id})
+
+def PistonUp():
+    entity_id = 'button.piston_go_to_top'
+    print("Moving piston to top...")
+    call_ha_service('button/press', {"entity_id": entity_id})
