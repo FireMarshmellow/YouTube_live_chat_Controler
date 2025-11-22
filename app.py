@@ -11,6 +11,7 @@ from storage import (
     save_plaques,
     update_plaque,
 )
+from youtube_utils import verify_youtube_keys
 
 app = Flask(__name__)
 
@@ -34,7 +35,8 @@ def manage_secrets():
         save_secrets(secrets)
         return redirect(url_for('manage_secrets'))
 
-    return render_template('manage_secrets.html', secrets=secrets)
+    api_status = verify_youtube_keys(secrets)
+    return render_template('manage_secrets.html', secrets=secrets, api_status=api_status)
 
 @app.route('/commands', methods=['GET', 'POST'])
 def manage_commands():

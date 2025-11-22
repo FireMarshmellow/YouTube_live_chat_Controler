@@ -13,8 +13,26 @@ import plaque_board_controller
 from app import app as flask_app
 from storage import find_plaque, load_commands, load_secrets, save_secrets
 from tts_module import gotts
+from youtube_utils import verify_youtube_keys
 
 CHAT_POLL_INTERVAL = 5  # seconds between YouTube chat polls
+
+
+def build_youtube_client(api_key: str):
+    return build("youtube", "v3", developerKey=api_key)
+
+
+def should_switch_api_key(error: HttpError, key_count: int) -> bool:
+    """Determine if the backup API key should be used after a failure."""
+    if key_count <= 1:
+        return False
+    status = getattr(getattr(error, "resp", None), "status", None)
+    if status in (403, 429):
+        return True
+    content = getattr(error, "content", b"") or b""
+    return b"quota" in content.lower()
+
+
 def handle_message(display_name: str, message_text: str, is_superchat: bool = False) -> None:
     """Route incoming chat messages to commands, LEDs, and TTS."""
     if not display_name or not message_text:
@@ -94,20 +112,38 @@ def refresh_twitch_oauth_token(secrets: dict) -> Optional[str]:
         print(f"Failed to refresh Twitch token: {resp.status_code} {resp.text}")
         return secrets.get("TWITCH_OAUTH_TOKEN")
 
-def listen_to_live_chat(live_chat_id: str) -> None:
+def listen_to_live_chat(live_chat_id: str, api_keys: list[str]) -> None:
     """Continuously poll YouTube live chat and forward the messages."""
-    secrets = load_secrets()
-    youtube = build('youtube', 'v3', developerKey=secrets['api_key'])
-    request = youtube.liveChatMessages().list(
-        liveChatId=live_chat_id,
-        part='id,snippet,authorDetails',
-    )
-    processed_message_ids = set()
+    if not api_keys:
+        print("No YouTube API keys configured; cannot listen to chat.")
+        return
 
-    while request:
+    current_key_index = 0
+    youtube = build_youtube_client(api_keys[current_key_index])
+    processed_message_ids = set()
+    next_page_token = None
+
+    while True:
         try:
+            request_params = {
+                "liveChatId": live_chat_id,
+                "part": "id,snippet,authorDetails",
+            }
+            if next_page_token:
+                request_params["pageToken"] = next_page_token
+            request = youtube.liveChatMessages().list(**request_params)
             response = request.execute()
         except HttpError as e:
+            if should_switch_api_key(e, len(api_keys)):
+                current_key_index = (current_key_index + 1) % len(api_keys)
+                youtube = build_youtube_client(api_keys[current_key_index])
+                print(
+                    f"Switched to backup YouTube API key (index {current_key_index}) "
+                    f"after error: {e}"
+                )
+                time.sleep(1)
+                continue
+
             print(f"Error retrieving live chat messages: {e}")
             break
 
@@ -122,47 +158,57 @@ def listen_to_live_chat(live_chat_id: str) -> None:
             is_superchat = item['snippet'].get('superChatDetails') is not None
             handle_message(display_name, message_text, is_superchat)
 
-        request = youtube.liveChatMessages().list_next(request, response)
-        if not request:
+        next_page_token = response.get("nextPageToken")
+        if not next_page_token:
             print("No more live chat messages available.")
             break
 
         time.sleep(CHAT_POLL_INTERVAL)
 
-def get_live_video_id(api_key: str, channel_id: str) -> Optional[str]:
+def get_live_video_id(channel_id: str, api_keys: list[str]) -> Optional[str]:
     """
     Fetches the active live video ID from a given YouTube channel.
     Returns None if no live stream is found.
     """
-    try:
-        youtube = build("youtube", "v3", developerKey=api_key)
-        request = youtube.search().list(
-            part="id",
-            channelId=channel_id,
-            eventType="live",  # Only active live streams
-            type="video",
-            maxResults=1
-        )
-        response = request.execute()
+    if not api_keys:
+        print("No API keys available for fetching live video ID.")
+        return None
+    last_error = None
+    for api_key in api_keys:
+        try:
+            youtube = build_youtube_client(api_key)
+            request = youtube.search().list(
+                part="id",
+                channelId=channel_id,
+                eventType="live",  # Only active live streams
+                type="video",
+                maxResults=1,
+            )
+            response = request.execute()
 
-        if "items" in response and len(response["items"]) > 0:
-            return response["items"][0]["id"]["videoId"]
-    except HttpError as e:
-        print(f"Error fetching live video ID: {e}")
-    
+            if "items" in response and len(response["items"]) > 0:
+                return response["items"][0]["id"]["videoId"]
+        except HttpError as e:
+            last_error = e
+            print(f"Error fetching live video ID with the current key: {e}")
+
+    if last_error:
+        print("Exhausted all API keys; live video ID unavailable.")
     return None  # No live video found
 
-def get_live_chat_id(video_id: str, secrets: dict) -> Optional[str]:
+def get_live_chat_id(video_id: str, api_keys: list[str]) -> Optional[str]:
     """
     Fetch the live chat ID for the given video.
     Falls back to API_KEY_Backup if the primary key fails.
     """
-    api_keys = [secrets['api_key'], secrets['api_key_backup']]
+    if not api_keys:
+        print("No API keys available for fetching live chat ID.")
+        return None
     last_exception = None
 
     for api_key in api_keys:
         try:
-            youtube = build("youtube", "v3", developerKey=api_key)
+            youtube = build_youtube_client(api_key)
             request = youtube.videos().list(part="liveStreamingDetails", id=video_id)
             response = request.execute()
 
@@ -212,21 +258,45 @@ if __name__ == '__main__':
         refreshed_token = refresh_twitch_oauth_token(secrets)
         secrets["TWITCH_OAUTH_TOKEN"] = refreshed_token
 
-        # Try to get an active live video ID automatically
-        video_id = get_live_video_id(secrets['api_key'], secrets['channel_id'])
+        api_key_status = verify_youtube_keys(secrets)
+        invalid_keys = [name for name, ok in api_key_status.items() if not ok]
+        api_keys: list[str] = []
+        if invalid_keys:
+            print(
+                "Cannot start YouTube integration until both API keys verify. "
+                f"Invalid keys: {', '.join(invalid_keys)}"
+            )
+        else:
+            api_keys = [
+                secrets["api_key"],
+                secrets["api_key_backup"],
+            ]
 
-        if not video_id:
+        # Try to get an active live video ID automatically
+        video_id = None
+        if api_keys:
+            video_id = get_live_video_id(secrets['channel_id'], api_keys)
+        else:
+            print("Skipping YouTube chat setup until API keys verify successfully.")
+
+        if api_keys and not video_id:
             print("No active live stream found.")
             video_id = input_with_timeout("Please enter a video ID manually: ", timeout=10)
 
-        if not video_id:
+        if not api_keys:
+            print("No valid YouTube API keys available; skipping YouTube chat.")
+        elif not video_id:
             print("No valid video ID provided; skipping YouTube chat.")
         else:
-            live_chat_id = get_live_chat_id(video_id, secrets)
+            live_chat_id = get_live_chat_id(video_id, api_keys)
 
             if live_chat_id:
                 print(f"Found live chat for video {video_id}. Listening for messages...")
-                threading.Thread(target=listen_to_live_chat, args=(live_chat_id,), daemon=True).start()
+                threading.Thread(
+                    target=listen_to_live_chat,
+                    args=(live_chat_id, api_keys),
+                    daemon=True,
+                ).start()
             else:
                 print("Live chat not found for this video. Disable Youtube Chat.")
 
