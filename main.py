@@ -165,14 +165,10 @@ def listen_to_live_chat(live_chat_id: str, api_keys: list[str]) -> None:
 
         time.sleep(CHAT_POLL_INTERVAL)
 
-def get_live_video_id(channel_id: str, api_keys: list[str]) -> Optional[str]:
-    """
-    Fetches the active live video ID from a given YouTube channel.
-    Returns None if no live stream is found.
-    """
-    if not api_keys:
-        print("No API keys available for fetching live video ID.")
-        return None
+def _search_video_by_event(
+    channel_id: str, api_keys: list[str], event_type: str
+) -> Optional[str]:
+    """Return the first video ID for the requested event type."""
     last_error = None
     for api_key in api_keys:
         try:
@@ -180,21 +176,38 @@ def get_live_video_id(channel_id: str, api_keys: list[str]) -> Optional[str]:
             request = youtube.search().list(
                 part="id",
                 channelId=channel_id,
-                eventType="live",  # Only active live streams
+                eventType=event_type,
                 type="video",
                 maxResults=1,
+                order="date",
             )
             response = request.execute()
-
-            if "items" in response and len(response["items"]) > 0:
-                return response["items"][0]["id"]["videoId"]
-        except HttpError as e:
-            last_error = e
-            print(f"Error fetching live video ID with the current key: {e}")
-
+            items = response.get("items", [])
+            if items:
+                return items[0]["id"]["videoId"]
+        except HttpError as exc:
+            last_error = exc
+            print(f"Failed to fetch {event_type} broadcast with current key: {exc}")
     if last_error:
-        print("Exhausted all API keys; live video ID unavailable.")
-    return None  # No live video found
+        print(f"Exhausted API keys; unable to find {event_type} broadcast.")
+    return None
+
+
+def get_live_video_id(channel_id: str, api_keys: list[str]) -> Optional[str]:
+    """
+    Fetches the active live video ID from a given YouTube channel.
+    Falls back to the next scheduled broadcast if nothing is currently live.
+    """
+    if not api_keys:
+        print("No API keys available for fetching live video ID.")
+        return None
+
+    live_video = _search_video_by_event(channel_id, api_keys, "live")
+    if live_video:
+        return live_video
+
+    print("No active stream found; looking for upcoming scheduled streams.")
+    return _search_video_by_event(channel_id, api_keys, "upcoming")
 
 def get_live_chat_id(video_id: str, api_keys: list[str]) -> Optional[str]:
     """
