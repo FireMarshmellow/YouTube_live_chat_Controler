@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent
 SECRETS_PATH = BASE_DIR / "secrets.json"
 COMMANDS_PATH = BASE_DIR / "commands.json"
 PLAQUES_PATH = BASE_DIR / "plaques.json"
+SOUNDS_PATH = BASE_DIR / "sounds"
 
 
 JsonDocument = Dict[str, Any] | MutableMapping[str, Any]
@@ -40,7 +41,11 @@ def save_secrets(secrets: JsonDocument) -> None:
 
 
 def load_commands() -> JsonDocument:
-    return _read_json(COMMANDS_PATH, dict)
+    commands = _read_json(COMMANDS_PATH, dict)
+    commands, changed = sync_sound_commands(commands)
+    if changed:
+        _write_json(COMMANDS_PATH, commands)
+    return commands
 
 
 def save_commands(commands: JsonDocument) -> None:
@@ -83,3 +88,42 @@ def find_plaque(display_name: str) -> JsonDocument | None:
         if display_name_lower in (yt, twitch):
             return plaque
     return None
+
+
+def _discover_sound_commands() -> Dict[str, Path]:
+    """Return a mapping of sound command names to their mp3 file paths."""
+    sounds_dir = SOUNDS_PATH
+    if not sounds_dir.exists():
+        return {}
+    return {
+        f"!sound_{path.stem.lower()}": path
+        for path in sounds_dir.glob("*.mp3")
+    }
+
+
+def sync_sound_commands(commands: JsonDocument) -> tuple[JsonDocument, bool]:
+    """
+    Ensure commands.json reflects the .mp3 files in the sounds folder.
+    Adds missing sound commands and removes ones without a backing file.
+    """
+    commands = dict(commands) if commands else {}
+    sound_files = _discover_sound_commands()
+    changed = False
+
+    # Add any new sounds as commands
+    for cmd_name in sound_files:
+        if cmd_name not in commands:
+            commands[cmd_name] = {
+                "enabled": True,
+                "timeout": 10,
+                "access_level": "regular",
+            }
+            changed = True
+
+    # Remove sound commands with no file
+    for cmd_name in list(commands.keys()):
+        if cmd_name.startswith("!sound_") and cmd_name not in sound_files:
+            commands.pop(cmd_name)
+            changed = True
+
+    return commands, changed
