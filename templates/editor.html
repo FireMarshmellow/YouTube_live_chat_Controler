@@ -14,6 +14,9 @@
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 10px;
+            min-height: 56px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            transition: box-shadow 150ms ease, transform 150ms ease;
         }
         .nav-link-btn {
             text-decoration: none;
@@ -23,6 +26,7 @@
             background: #fff;
             color: #0d6efd;
             font-weight: 500;
+            transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
         }
         .nav-link-btn.active {
             background: #0d6efd;
@@ -45,8 +49,12 @@
             background: var(--secondary-color);
             color: var(--text-color);
             margin: 0;
-            padding: 20px;
+            padding: 0;
             min-height: 100vh;
+            overflow-y: scroll;
+        }
+        .content-shell {
+            padding: 0 12px 24px;
         }
 
         #toolbar {
@@ -230,17 +238,19 @@
             <button class="btn btn-danger btn-sm" onclick="skipTTS()">Skip Current TTS</button>
         </div>
     </div>
-    <div id="toolbar">
-        <!-- Removed Save/Load buttons and file input -->
+    <div class="container content-shell">
+        <div id="toolbar">
+            <!-- Removed Save/Load buttons and file input -->
+        </div>
+        <!-- NEW: Palette buttons to add plaques and list display -->
+        <div id="plaquePalette">
+            <!-- Buttons will appear here -->
+        </div>
+        <div id="plaqueList">
+            <!-- Plaque details list -->
+        </div>
+        <div id="grid"></div>
     </div>
-    <!-- NEW: Palette buttons to add plaques and list display -->
-    <div id="plaquePalette">
-        <!-- Buttons will appear here -->
-    </div>
-    <div id="plaqueList">
-        <!-- Plaque details list -->
-    </div>
-    <div id="grid"></div>
 
     <script>
         (function() {
