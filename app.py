@@ -114,7 +114,8 @@ def load_led_layout():
                 if val > 0:
                     normalized_row.append(val - 1)  # shift to 0-based indexing
                 else:
-                    normalized_row.append(0)
+                    # Use -1 as sentinel for "no LED" so ID 0 remains valid
+                    normalized_row.append(-1)
             normalized_rows.append(normalized_row)
         return normalized_rows
 
