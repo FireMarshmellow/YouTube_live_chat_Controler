@@ -63,11 +63,7 @@
 
         #grid {
             position: relative;
-            width: 750px;  /* 15 columns * 50px */
-            height: 500px; /* 10 rows * 50px */
             display: grid;
-            grid-template-columns: repeat(15, 50px);
-            grid-template-rows: repeat(10, 50px);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background: white;
@@ -258,8 +254,10 @@
             const grid = document.getElementById('grid');
             const plaquePalette = document.getElementById('plaquePalette');
             const plaqueListContainer = document.getElementById('plaqueList');
-            const rows = 10, cols = 15;
-            const cellSize = 50; // pixels per grid cell
+            const layoutData = {{ led_layout|tojson|safe }};
+            const rows = layoutData.length || 0;
+            const cols = rows ? layoutData[0].length : 0;
+            const cellSize = 30; // pixels per grid cell
             
             // Global array to store plaque details.
             const plaques = []; // Each entry: {id, plaqueType, name, YT_Name, twitchusername, Leds_colour, pos: {left, top}, Leds: "" }
@@ -267,15 +265,51 @@
             
             // Occupancy grid remains (for grid display when plaques are moved).
             window.occupancy = Array.from({ length: rows }, () => Array(cols).fill(false));
+
+            function isCellAvailable(r, c) {
+                if (r < 0 || c < 0 || r >= rows || c >= cols) return false;
+                return layoutData[r][c] !== 0;
+            }
+
+            function firstAvailableCell() {
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (isCellAvailable(r, c)) return { row: r, col: c };
+                    }
+                }
+                return { row: 0, col: 0 };
+            }
+
+            function collectLeds(row, col, def) {
+                const leds = [];
+                for (let i = row; i < row + def.h; i++) {
+                    for (let j = col; j < col + def.w; j++) {
+                        if (!isCellAvailable(i, j)) return null; // invalid area
+                        const val = layoutData[i][j];
+                        if (val) leds.push(val);
+                    }
+                }
+                return leds;
+            }
             
             // Render grid cells.
+            grid.style.width = `${cols * cellSize}px`;
+            grid.style.height = `${rows * cellSize}px`;
+            grid.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+            grid.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
+
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'grid-cell';
                     cell.dataset.row = r;
                     cell.dataset.col = c;
-                    cell.innerText = r * cols + c; // Display cell number
+                    const val = layoutData[r][c];
+                    cell.innerText = val === 0 ? '' : val;
+                    if (val === 0) {
+                        cell.style.background = '#eef1f5';
+                        cell.style.color = '#c3c7cd';
+                    }
                     grid.appendChild(cell);
                 }
             }
@@ -429,8 +463,9 @@
                 plaque.innerText = name;
                 plaque.style.width = (def.w * cellSize - 4) + 'px';
                 plaque.style.height = (def.h * cellSize - 4) + 'px';
-                plaque.style.left = '0px';
-                plaque.style.top = '0px';
+                const start = firstAvailableCell();
+                plaque.style.left = `${start.col * cellSize}px`;
+                plaque.style.top = `${start.row * cellSize}px`;
                 // Use the provided color.
                 plaque.style.background = Leds_colour;
                 
@@ -464,24 +499,29 @@
                 // Create plaque record.
                 const id = ++plaqueIdCounter;
                 plaque.dataset.id = id;
-                plaques.push({
+                const record = {
                     id,
                     plaqueType,
                     name,
                     YT_Name,
                     twitchusername,
                     Leds_colour,
-                    pos: { left: 0, top: 0 },
+                    pos: { left: start.col * cellSize, top: start.row * cellSize },
                     Leds: "" // Updated: no more cells
-                });
+                };
+                const leds = collectLeds(start.row, start.col, def) || [];
+                record.Leds = leds.join(',');
+                plaques.push(record);
                 updatePlaqueList();
             }
             
             // Modify makeDraggable to update plaque info on drag end.
             function makeDraggable(plaque) {
-                let offsetX, offsetY;
+                let offsetX, offsetY, prevLeft, prevTop;
                 function dragStart(e) {
                     if (e.button !== 0) return;
+                    prevLeft = plaque.offsetLeft;
+                    prevTop = plaque.offsetTop;
                     offsetX = e.clientX - plaque.offsetLeft;
                     offsetY = e.clientY - plaque.offsetTop;
                     document.addEventListener('mousemove', drag);
@@ -505,18 +545,18 @@
                     const def = plaqueDefinitions[ plaques.find(p => p.id === id).plaqueType ];
                     const left = parseInt(plaque.style.left, 10);
                     const top = parseInt(plaque.style.top, 10);
-                    let ledIndices = [];
                     const col = left / cellSize;
                     const row = top / cellSize;
-                    for(let i = row; i < row + def.h; i++){
-                        for(let j = col; j < col + def.w; j++){
-                            ledIndices.push(i * cols + j);
-                        }
+                    const leds = collectLeds(row, col, def);
+                    if (!leds || leds.length === 0) {
+                        // Revert if invalid area (e.g., over the logo void)
+                        plaque.style.left = prevLeft + 'px';
+                        plaque.style.top = prevTop + 'px';
+                        return;
                     }
-                    // Update plaque record: save the LED positions as a comma-separated string in "Leds"
                     const plaqueRec = plaques.find(p => p.id === id);
                     plaqueRec.pos = { left, top };
-                    plaqueRec.Leds = ledIndices.join(',');
+                    plaqueRec.Leds = leds.join(',');
                     updatePlaqueList();
                 }
                 plaque.addEventListener('mousedown', dragStart);
@@ -579,8 +619,20 @@
                     // Update the plaque element's style.
                     const plaqueElem = document.querySelector(`.plaque[data-id="${rec.id}"]`);
                     if (plaqueElem) {
-                        plaqueElem.style.left = rec.pos.left + 'px';
-                        plaqueElem.style.top = rec.pos.top + 'px';
+                        let left = rec.pos.left || 0;
+                        let top = rec.pos.top || 0;
+                        const def = plaqueDefinitions[rec.plaqueType];
+                        let leds = collectLeds(Math.round(top / cellSize), Math.round(left / cellSize), def);
+                        if (!leds || leds.length === 0) {
+                            const start = firstAvailableCell();
+                            left = start.col * cellSize;
+                            top = start.row * cellSize;
+                            leds = collectLeds(start.row, start.col, def) || [];
+                        }
+                        plaqueElem.style.left = left + 'px';
+                        plaqueElem.style.top = top + 'px';
+                        rec.pos = { left, top };
+                        rec.Leds = leds.join(',');
                     }
                 });
                 updatePlaqueList();

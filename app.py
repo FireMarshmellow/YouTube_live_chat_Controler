@@ -1,4 +1,6 @@
 from flask import Flask, request, render_template, redirect, url_for, jsonify
+from pathlib import Path
+import csv
 from plaque_board_controller import set_leds
 import commandhandler
 import tts_module
@@ -96,6 +98,16 @@ def manage_commands():
         access_levels=get_access_levels()
     )
 
+
+def load_led_layout():
+    """Load the LED grid layout from CSV into a list of lists."""
+    layout_path = Path("New_led_layout.csv")
+    if not layout_path.exists():
+        return []
+    with layout_path.open("r", newline="") as f:
+        reader = csv.reader(f)
+        return [[int(cell) for cell in row] for row in reader]
+
 # Function to get access levels
 def get_access_levels():
     return {
@@ -160,9 +172,9 @@ def editor():
         update_plaque(yt_name, leds_colour, leds)
         return redirect(url_for("editor"))
     
-    # Load data for display
     data = load_plaques()
-    return render_template("editor.html", data=data)
+    layout = load_led_layout()
+    return render_template("editor.html", data=data, led_layout=layout)
 
 @app.route("/edit", methods=["POST"])
 def edit():
