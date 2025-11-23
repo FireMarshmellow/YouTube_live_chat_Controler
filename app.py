@@ -106,7 +106,17 @@ def load_led_layout():
         return []
     with layout_path.open("r", newline="") as f:
         reader = csv.reader(f)
-        return [[int(cell) for cell in row] for row in reader]
+        normalized_rows = []
+        for row in reader:
+            normalized_row = []
+            for cell in row:
+                val = int(cell)
+                if val > 0:
+                    normalized_row.append(val - 1)  # shift to 0-based indexing
+                else:
+                    normalized_row.append(0)
+            normalized_rows.append(normalized_row)
+        return normalized_rows
 
 # Function to get access levels
 def get_access_levels():
