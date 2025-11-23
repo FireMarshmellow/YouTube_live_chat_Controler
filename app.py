@@ -140,6 +140,15 @@ def skip_tts():
     tts_module.skip_current_tts()  # Clear current audio and move to the next one
     return jsonify({"status": "success", "message": "Current TTS skipped!"})
 
+@app.route('/pause_tts', methods=['POST'])
+def pause_tts():
+    paused = tts_module.toggle_pause()
+    return jsonify({"status": "success", "paused": paused})
+
+@app.route('/tts_status', methods=['GET'])
+def tts_status():
+    return jsonify({"paused": tts_module.is_paused()})
+
 
 
 @app.route("/editor", methods=["GET", "POST"])

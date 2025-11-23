@@ -7,9 +7,10 @@ import queue
 import pyttsx3
 import atexit
 
-# Initialize the TTS queue
+# Initialize the TTS queue and state flags
 tts_queue = queue.Queue()
 stop_event = threading.Event()
+pause_event = threading.Event()
 
 def create_engine():
     """Create a new pyttsx3 engine instance."""
@@ -26,6 +27,10 @@ def _tts_worker():
 
         text, newtts = item  # Unpack the text and newtts flag
         try:
+            # Wait while paused, but allow stop to interrupt
+            while pause_event.is_set() and not stop_event.is_set():
+                time.sleep(0.1)
+
             if stop_event.is_set():
                 continue
 
@@ -111,6 +116,31 @@ def skip_current_tts():
     except:
         print("Error stopping Engine (this could be fine)")
     stop_event.clear()  # Allow the next audio to play
+
+
+def pause_queue():
+    """Pause processing of the TTS queue without clearing items."""
+    pause_event.set()
+    return True
+
+
+def resume_queue():
+    """Resume processing of the TTS queue."""
+    pause_event.clear()
+    return False
+
+
+def toggle_pause():
+    """Toggle pause state and return the new paused status."""
+    if pause_event.is_set():
+        resume_queue()
+    else:
+        pause_queue()
+    return pause_event.is_set()
+
+
+def is_paused() -> bool:
+    return pause_event.is_set()
 
 
 def clear_queue():
