@@ -112,7 +112,7 @@ def refresh_twitch_oauth_token(secrets: dict) -> Optional[str]:
         print(f"Failed to refresh Twitch token: {resp.status_code} {resp.text}")
         return secrets.get("TWITCH_OAUTH_TOKEN")
 
-def listen_to_live_chat(live_chat_id: str, api_keys: list[str]) -> None:
+def listen_to_live_chat(live_chat_id: str, api_keys: list[str], skip_first_batch: bool = True) -> None:
     """Continuously poll YouTube live chat and forward the messages."""
     if not api_keys:
         print("No YouTube API keys configured; cannot listen to chat.")
@@ -122,6 +122,8 @@ def listen_to_live_chat(live_chat_id: str, api_keys: list[str]) -> None:
     youtube = build_youtube_client(api_keys[current_key_index])
     processed_message_ids = set()
     next_page_token = None
+
+    first_batch = True
 
     while True:
         try:
@@ -147,16 +149,25 @@ def listen_to_live_chat(live_chat_id: str, api_keys: list[str]) -> None:
             print(f"Error retrieving live chat messages: {e}")
             break
 
-        for item in response.get('items', []):
-            message_id = item['id']
-            if message_id in processed_message_ids:
-                continue
+        items = response.get('items', [])
 
-            processed_message_ids.add(message_id)
-            message_text = item['snippet']['displayMessage']
-            display_name = item['authorDetails']['displayName']
-            is_superchat = item['snippet'].get('superChatDetails') is not None
-            handle_message(display_name, message_text, is_superchat)
+        if first_batch and skip_first_batch:
+            # Prime the cache with existing messages to avoid replaying on restarts
+            for item in items:
+                processed_message_ids.add(item['id'])
+            first_batch = False
+        else:
+            first_batch = False
+            for item in items:
+                message_id = item['id']
+                if message_id in processed_message_ids:
+                    continue
+
+                processed_message_ids.add(message_id)
+                message_text = item['snippet']['displayMessage']
+                display_name = item['authorDetails']['displayName']
+                is_superchat = item['snippet'].get('superChatDetails') is not None
+                handle_message(display_name, message_text, is_superchat)
 
         next_page_token = response.get("nextPageToken")
         if not next_page_token:
@@ -307,7 +318,7 @@ if __name__ == '__main__':
                 print(f"Found live chat for video {video_id}. Listening for messages...")
                 threading.Thread(
                     target=listen_to_live_chat,
-                    args=(live_chat_id, api_keys),
+                    args=(live_chat_id, api_keys, True),
                     daemon=True,
                 ).start()
             else:
