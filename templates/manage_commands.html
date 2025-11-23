@@ -9,6 +9,34 @@
         body {
             font-family: Arial, sans-serif;
         }
+        .nav-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+        }
+        .nav-link-btn {
+            text-decoration: none;
+            padding: 8px 14px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            color: #0d6efd;
+            font-weight: 500;
+        }
+        .nav-link-btn.active {
+            background: #0d6efd;
+            color: #fff;
+            border-color: #0d6efd;
+        }
+        .nav-spacer {
+            flex: 1;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -51,13 +79,14 @@
 <body>
     <div class="container mt-4">
         <!-- Navigation Buttons -->
-        <a href="{{ url_for('index') }}" class="btn btn-outline-primary mb-3">Home</a>
-        <a href="{{ url_for('editor') }}" class="btn btn-outline-secondary mb-3">PlaqueBoard</a>
-        <a href="{{ url_for('manage_secrets') }}" class="btn btn-outline-secondary mb-3">Secrets</a>
-        <a href="{{ url_for('manage_commands') }}" class="btn btn-outline-secondary mb-3">Commands</a>
-
-        <!-- Skip TTS Button -->
-        <button class="btn btn-danger mb-3" onclick="skipTTS()">Skip Current TTS</button>
+        <div class="nav-bar">
+            <a href="{{ url_for('index') }}" class="nav-link-btn {% if request.path == url_for('index') %}active{% endif %}">Home</a>
+            <a href="{{ url_for('editor') }}" class="nav-link-btn {% if request.path == url_for('editor') %}active{% endif %}">PlaqueBoard</a>
+            <a href="{{ url_for('manage_secrets') }}" class="nav-link-btn {% if request.path == url_for('manage_secrets') %}active{% endif %}">Secrets</a>
+            <a href="{{ url_for('manage_commands') }}" class="nav-link-btn {% if request.path == url_for('manage_commands') %}active{% endif %}">Commands</a>
+            <span class="nav-spacer"></span>
+            <button class="btn btn-danger btn-sm" onclick="skipTTS()">Skip Current TTS</button>
+        </div>
 
         <h1>Manage Commands</h1>
         <form method="post">

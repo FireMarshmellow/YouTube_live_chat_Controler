@@ -36,7 +36,30 @@ def manage_secrets():
         return redirect(url_for('manage_secrets'))
 
     api_status = verify_youtube_keys(secrets)
-    return render_template('manage_secrets.html', secrets=secrets, api_status=api_status)
+    def categorize_secret(key: str) -> str:
+        if key.startswith("TWITCH_"):
+            return "Twitch"
+        if key in {"api_key", "api_key_backup", "channel_id", "video_id"}:
+            return "YouTube"
+        if key in {"access_token", "ha_url"}:
+            return "Home Assistant"
+        if key == "board_ip":
+            return "Hardware"
+        return "Other"
+
+    grouped_secrets = {}
+    for key, value in secrets.items():
+        grouped_secrets.setdefault(categorize_secret(key), []).append((key, value))
+
+    category_order = ["Twitch", "YouTube", "Home Assistant", "Hardware", "Other"]
+
+    return render_template(
+        'manage_secrets.html',
+        secrets=secrets,
+        api_status=api_status,
+        grouped_secrets=grouped_secrets,
+        category_order=category_order,
+    )
 
 @app.route('/commands', methods=['GET', 'POST'])
 def manage_commands():
