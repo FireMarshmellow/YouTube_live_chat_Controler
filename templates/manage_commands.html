@@ -61,6 +61,10 @@
 
         <h1>Manage Commands</h1>
         <form method="post">
+            {% for category in category_order %}
+            {% if category in grouped_commands %}
+            {% set command_list = grouped_commands[category] %}
+            <h3 class="mt-4">{{ category }}</h3>
             <table class="table table-bordered">
                 <tr>
                     <th>Command</th>
@@ -68,7 +72,7 @@
                     <th>Access Level</th>
                     <th>Actions</th>
                 </tr>
-                {% for command, details in commands.items() %}
+                {% for command, details in command_list %}
                 <tr>
                     <td class="command {% if not details['enabled'] %}disabled{% endif %}" data-command="{{ command }}" onclick="toggleCommand(this)">{{ command }}</td>
                     <td><input type="number" name="timeout_{{ command }}" value="{{ details['timeout'] }}" required></td>
@@ -86,6 +90,8 @@
                 </tr>
                 {% endfor %}
             </table>
+            {% endif %}
+            {% endfor %}
         </form>
     </div>
 

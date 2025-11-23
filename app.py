@@ -49,7 +49,29 @@ def manage_commands():
         save_commands(commands)
         return redirect(url_for('manage_commands'))
 
-    return render_template('manage_commands.html', commands=commands, access_levels=get_access_levels())
+    def categorize(command_name: str) -> str:
+        if command_name.startswith("!sound_"):
+            return "Sounds"
+        if command_name.startswith("!desk") or command_name in {"!bubbles", "!piston_up", "!piston_down"}:
+            return "Home Assistant"
+        return "Other"
+
+    grouped = {}
+    for name, details in commands.items():
+        grouped.setdefault(categorize(name), []).append((name, details))
+
+    # keep a stable order inside categories
+    for entries in grouped.values():
+        entries.sort(key=lambda item: item[0])
+
+    category_order = ["Sounds", "Home Assistant", "Other"]
+
+    return render_template(
+        'manage_commands.html',
+        grouped_commands=grouped,
+        category_order=category_order,
+        access_levels=get_access_levels()
+    )
 
 # Function to get access levels
 def get_access_levels():
