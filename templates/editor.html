@@ -254,7 +254,15 @@
             const grid = document.getElementById('grid');
             const plaquePalette = document.getElementById('plaquePalette');
             const plaqueListContainer = document.getElementById('plaqueList');
-            const layoutData = {{ led_layout|tojson|safe }};
+            let layoutData = {{ led_layout|tojson|safe }};
+            const hasLayout = Array.isArray(layoutData) && layoutData.length > 0;
+            if (!hasLayout) {
+                // Fallback to a simple 10x15 sequential grid
+                layoutData = Array.from({ length: 10 }, (_, r) =>
+                    Array.from({ length: 15 }, (_, c) => r * 15 + c)
+                );
+            }
+
             const rows = layoutData.length || 0;
             const cols = rows ? layoutData[0].length : 0;
             const cellSize = 30; // pixels per grid cell
