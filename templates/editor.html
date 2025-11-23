@@ -276,7 +276,7 @@
 
             function isCellAvailable(r, c) {
                 if (r < 0 || c < 0 || r >= rows || c >= cols) return false;
-                return layoutData[r][c] !== 0;
+                return layoutData[r][c] !== -1;
             }
 
             function firstAvailableCell() {
@@ -294,7 +294,7 @@
                     for (let j = col; j < col + def.w; j++) {
                         if (!isCellAvailable(i, j)) return null; // invalid area
                         const val = layoutData[i][j];
-                        if (val) leds.push(val);
+                        if (val >= 0) leds.push(val);
                     }
                 }
                 return leds;
@@ -313,8 +313,8 @@
                     cell.dataset.row = r;
                     cell.dataset.col = c;
                     const val = layoutData[r][c];
-                    cell.innerText = val === 0 ? '' : val;
-                    if (val === 0) {
+                    cell.innerText = val === -1 ? '' : val;
+                    if (val === -1) {
                         cell.style.background = '#eef1f5';
                         cell.style.color = '#c3c7cd';
                     }
