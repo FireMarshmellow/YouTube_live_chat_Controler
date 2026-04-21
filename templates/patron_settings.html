@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Patron Blinker – Settings</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .nav-bar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 24px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+        }
+        .nav-link-btn {
+            text-decoration: none;
+            padding: 8px 14px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            color: #0d6efd;
+            font-weight: 500;
+        }
+        .nav-link-btn.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4" style="max-width: 540px;">
+        <div class="nav-bar">
+            <a href="{{ url_for('index') }}" class="nav-link-btn">Patrons</a>
+            <a href="{{ url_for('settings') }}" class="nav-link-btn active">Settings</a>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title mb-3">LED Board</h5>
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Board IP</label>
+                        <input type="text" name="board_ip" class="form-control"
+                               value="{{ board_ip }}" placeholder="http://192.168.1.100" />
+                        <div class="form-text">Full URL to your WLED board, e.g. <code>http://192.168.1.100</code></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Active slots <span id="slotsVal" class="text-primary">{{ num_slots }}</span></label>
+                        <input type="range" name="num_slots" class="form-range"
+                               min="1" max="{{ max_slots }}" step="1" value="{{ num_slots }}"
+                               oninput="document.getElementById('slotsVal').textContent = this.value" />
+                        <div class="form-text">How many patrons animate simultaneously (1–{{ max_slots }}).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Hold duration <span id="holdVal" class="text-primary">{{ hold_secs | int }}s</span></label>
+                        <input type="range" name="hold_secs" class="form-range"
+                               min="0" max="30" step="1" value="{{ hold_secs | int }}"
+                               oninput="document.getElementById('holdVal').textContent = this.value + 's'" />
+                        <div class="form-text">Seconds each patron stays lit at full brightness before fading out (0 = no hold).</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Patron LED Editor</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .nav-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+        }
+        .nav-link-btn {
+            text-decoration: none;
+            padding: 8px 14px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            color: #0d6efd;
+            font-weight: 500;
+            transition: background-color 120ms ease, color 120ms ease;
+        }
+        .nav-link-btn.active {
+            background: #0d6efd;
+            color: #fff;
+            border-color: #0d6efd;
+        }
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #f5f6fa;
+            --border-color: #dcdde1;
+            --text-color: #2f3640;
+            --shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--secondary-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            overflow-y: scroll;
+        }
+        .content-shell { padding: 0 12px 24px; }
+        #grid {
+            position: relative;
+            display: grid;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: white;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            margin: 0 auto;
+        }
+        .grid-cell {
+            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a4b0be;
+            user-select: none;
+        }
+        .plaque {
+            position: absolute;
+            background: rgba(74, 144, 226, 0.2);
+            border: 2px solid var(--primary-color);
+            border-radius: 4px;
+            box-sizing: border-box;
+            overflow: hidden;
+            cursor: text;
+            box-shadow: var(--shadow);
+            padding: 4px;
+            font-size: 14px;
+            transition: box-shadow 0.3s ease;
+            user-select: none;
+        }
+        .plaque:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .edit-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            z-index: 10;
+            font-size: 12px;
+            padding: 4px 8px;
+            cursor: pointer;
+            background: white;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            border-radius: 4px;
+            opacity: 0.8;
+            transition: all 0.2s ease;
+        }
+        .edit-btn:hover { opacity: 1; background: var(--primary-color); color: white; }
+        #plaquePalette {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: white;
+            box-shadow: var(--shadow);
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+        #plaquePalette button {
+            padding: 8px 16px;
+            border: none;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        #plaquePalette button:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        #plaqueList {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: white;
+            box-shadow: var(--shadow);
+        }
+        #plaqueList div {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        #plaqueList .field-group { display: flex; align-items: center; gap: 4px; }
+        #plaqueList input[type="text"] {
+            padding: 4px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 14px;
+            width: 120px;
+        }
+        #plaqueList input[type="color"] { width: 40px; height: 24px; padding: 0; border: none; border-radius: 4px; }
+        #plaqueList .button-group { display: flex; gap: 4px; margin-left: auto; }
+        #plaqueList button {
+            padding: 4px 8px;
+            min-width: 60px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        #plaqueList button:hover { opacity: 0.9; transform: translateY(-1px); }
+    </style>
+</head>
+<body>
+    <div id="plaque-tooltip" style="position:fixed;display:none;background:rgba(0,0,0,0.82);color:#fff;padding:5px 10px;border-radius:6px;font-size:13px;font-weight:500;pointer-events:none;z-index:9999;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>
+    <div class="container mt-4">
+        <div class="nav-bar">
+            <a href="{{ url_for('index') }}" class="nav-link-btn active">Patrons</a>
+            <a href="{{ url_for('settings') }}" class="nav-link-btn">Settings</a>
+            <button id="animBtn" class="btn btn-warning btn-sm ms-2" onclick="toggleAnimation()">Stop Animation</button>
+        </div>
+    </div>
+    <div class="container content-shell">
+        <div id="plaquePalette"></div>
+        <div id="grid"></div>
+        <div id="plaqueList"></div>
+    </div>
+
+    <script>
+        (function () {
+            const grid = document.getElementById('grid');
+            const plaquePalette = document.getElementById('plaquePalette');
+            const plaqueListContainer = document.getElementById('plaqueList');
+            let layoutData = {{ led_layout|tojson|safe }};
+            const hasLayout = Array.isArray(layoutData) && layoutData.length > 0;
+            if (!hasLayout) {
+                layoutData = Array.from({ length: 10 }, (_, r) =>
+                    Array.from({ length: 15 }, (_, c) => r * 15 + c)
+                );
+            }
+
+            const rows = layoutData.length || 0;
+            const cols = rows ? layoutData[0].length : 0;
+            const cellSize = 30;
+            const plaques = [];
+            let plaqueIdCounter = 0;
+            window.occupancy = Array.from({ length: rows }, () => Array(cols).fill(false));
+
+            function isCellAvailable(r, c) {
+                if (r < 0 || c < 0 || r >= rows || c >= cols) return false;
+                return layoutData[r][c] !== -1;
+            }
+
+            function firstAvailableCell() {
+                for (let r = 0; r < rows; r++)
+                    for (let c = 0; c < cols; c++)
+                        if (isCellAvailable(r, c)) return { row: r, col: c };
+                return { row: 0, col: 0 };
+            }
+
+            function collectLeds(row, col, def) {
+                const leds = [];
+                for (let i = row; i < row + def.h; i++) {
+                    for (let j = col; j < col + def.w; j++) {
+                        if (!isCellAvailable(i, j)) return null;
+                        const val = layoutData[i][j];
+                        if (val >= 0) leds.push(val);
+                    }
+                }
+                return leds;
+            }
+
+            grid.style.width = `${cols * cellSize}px`;
+            grid.style.height = `${rows * cellSize}px`;
+            grid.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+            grid.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    const val = layoutData[r][c];
+                    cell.innerText = val === -1 ? '' : val;
+                    if (val === -1) { cell.style.background = '#eef1f5'; cell.style.color = '#c3c7cd'; }
+                    grid.appendChild(cell);
+                }
+            }
+
+            const plaqueDefinitions = { "1x1": { w: 1, h: 1 }, "2x1": { w: 2, h: 1 }, "3x1": { w: 3, h: 1 }, "3x2": { w: 3, h: 2 } };
+            window.isLoading = false;
+
+            function autoSavePlaques() {
+                fetch('/plaques', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(plaques)
+                }).catch(err => console.error(err));
+            }
+
+            function autoLoadPlaques() {
+                window.isLoading = true;
+                fetch('/plaques')
+                    .then(r => r.json())
+                    .then(loaded => {
+                        if (loaded && Array.isArray(loaded)) {
+                            document.querySelectorAll('.plaque').forEach(p => p.remove());
+                            plaques.length = 0;
+                            plaqueIdCounter = 0;
+                            loaded.forEach(item => {
+                                const color = item.Leds_colour || item.color || "#AABBCC";
+                                createPlaque(item.plaqueType, item.name, item.YT_Name || item.username || '', item.twitchusername || '', color);
+                                const rec = plaques[plaques.length - 1];
+                                rec.pos = item.pos;
+                                rec.Leds = item.Leds;
+                                const el = document.querySelector(`.plaque[data-id="${rec.id}"]`);
+                                if (el) { el.style.left = rec.pos.left + 'px'; el.style.top = rec.pos.top + 'px'; }
+                            });
+                            updatePlaqueList();
+                        }
+                        window.isLoading = false;
+                    })
+                    .catch(err => { console.error(err); window.isLoading = false; });
+            }
+
+            function updatePlaqueList() {
+                plaqueListContainer.innerHTML = '';
+                plaques.forEach(p => {
+                    const container = document.createElement('div');
+                    container.innerHTML = `
+                        <div class="field-group"><span>ID: ${p.id}</span></div>
+                        <div class="field-group"><span>Size: ${p.plaqueType}</span></div>
+                        <div class="field-group"><span>Name:</span><input type="text" id="name-${p.id}" value="${p.name}" /></div>
+                        <div class="field-group"><span>YT:</span><input type="text" id="YT_Name-${p.id}" value="${p.YT_Name || ''}" /></div>
+                        <div class="field-group"><span>Twitch:</span><input type="text" id="twitchusername-${p.id}" value="${p.twitchusername || ''}" /></div>
+                        <div class="field-group"><span>Color:</span><input type="color" id="Leds_colour-${p.id}" value="${p.Leds_colour}" /></div>
+                        <div class="button-group">
+                            <button id="save-${p.id}" style="background:#4a90e2;color:white">Save</button>
+                            <button id="test-${p.id}" style="background:#17a2b8;color:white">Test</button>
+                            <button id="delete-${p.id}" style="background:#e74c3c;color:white">Del</button>
+                        </div>`;
+                    plaqueListContainer.appendChild(container);
+
+                    document.getElementById(`save-${p.id}`).addEventListener('click', () => {
+                        p.name = document.getElementById(`name-${p.id}`).value;
+                        p.YT_Name = document.getElementById(`YT_Name-${p.id}`).value;
+                        p.twitchusername = document.getElementById(`twitchusername-${p.id}`).value;
+                        p.Leds_colour = document.getElementById(`Leds_colour-${p.id}`).value;
+                        const el = document.querySelector(`.plaque[data-id="${p.id}"]`);
+                        if (el) { el.childNodes[0].nodeValue = p.name; el.style.background = p.Leds_colour; el.dataset.patronName = p.name; }
+                        updatePlaqueList();
+                    });
+
+                    document.getElementById(`delete-${p.id}`).addEventListener('click', () => {
+                        const idx = plaques.findIndex(item => item.id === p.id);
+                        if (idx !== -1) plaques.splice(idx, 1);
+                        const el = document.querySelector(`.plaque[data-id="${p.id}"]`);
+                        if (el) el.remove();
+                        updatePlaqueList();
+                    });
+
+                    document.getElementById(`test-${p.id}`).addEventListener('click', () => {
+                        const color = document.getElementById(`Leds_colour-${p.id}`).value;
+                        fetch('/trigger_leds', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ Leds: p.Leds, Leds_colour: color })
+                        }).then(r => r.json()).then(d => {
+                            if (d.status !== 'success') console.error('Test failed:', d.message);
+                        }).catch(e => console.error(e));
+                    });
+                });
+                if (!window.isLoading) autoSavePlaques();
+            }
+
+            function createPlaque(plaqueType, name, YT_Name, twitchusername, Leds_colour) {
+                const def = plaqueDefinitions[plaqueType];
+                const plaque = document.createElement('div');
+                plaque.className = 'plaque';
+                plaque.contentEditable = true;
+                plaque.innerText = name;
+                plaque.style.width = (def.w * cellSize - 4) + 'px';
+                plaque.style.height = (def.h * cellSize - 4) + 'px';
+                const start = firstAvailableCell();
+                plaque.style.left = `${start.col * cellSize}px`;
+                plaque.style.top = `${start.row * cellSize}px`;
+                plaque.style.background = Leds_colour;
+                plaque.dataset.patronName = name;
+                plaque.addEventListener('mouseenter', (e) => showPlaqueTip(plaque.dataset.patronName, e));
+                plaque.addEventListener('mousemove', (e) => movePlaqueTip(e));
+                plaque.addEventListener('mouseleave', hidePlaqueTip);
+
+                const editButton = document.createElement('button');
+                editButton.innerText = 'Edit';
+                editButton.className = 'edit-btn';
+                plaque.dataset.movable = "false";
+                editButton.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (plaque.dataset.movable === "false") {
+                        plaque.dataset.movable = "true";
+                        plaque.contentEditable = false;
+                        editButton.innerText = "Done";
+                        plaque.style.cursor = "move";
+                        makeDraggable(plaque);
+                    } else {
+                        plaque.dataset.movable = "false";
+                        removeDraggable(plaque);
+                        plaque.style.cursor = "text";
+                        editButton.innerText = "Edit";
+                        plaque.contentEditable = true;
+                    }
+                });
+                plaque.appendChild(editButton);
+                grid.appendChild(plaque);
+
+                const id = ++plaqueIdCounter;
+                plaque.dataset.id = id;
+                const leds = collectLeds(start.row, start.col, def) || [];
+                plaques.push({ id, plaqueType, name, YT_Name, twitchusername, Leds_colour, pos: { left: start.col * cellSize, top: start.row * cellSize }, Leds: leds.join(',') });
+                updatePlaqueList();
+            }
+
+            function makeDraggable(plaque) {
+                let offsetX, offsetY, prevLeft, prevTop;
+                function dragStart(e) {
+                    if (e.button !== 0) return;
+                    prevLeft = plaque.offsetLeft;
+                    prevTop = plaque.offsetTop;
+                    offsetX = e.clientX - plaque.offsetLeft;
+                    offsetY = e.clientY - plaque.offsetTop;
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', dragEnd);
+                }
+                function drag(e) {
+                    let newLeft = Math.max(0, Math.min(e.clientX - offsetX, grid.offsetWidth - plaque.offsetWidth));
+                    let newTop = Math.max(0, Math.min(e.clientY - offsetY, grid.offsetHeight - plaque.offsetHeight));
+                    plaque.style.left = Math.round(newLeft / cellSize) * cellSize + 'px';
+                    plaque.style.top = Math.round(newTop / cellSize) * cellSize + 'px';
+                }
+                function dragEnd() {
+                    document.removeEventListener('mousemove', drag);
+                    document.removeEventListener('mouseup', dragEnd);
+                    const id = parseInt(plaque.dataset.id, 10);
+                    const rec = plaques.find(p => p.id === id);
+                    const def = plaqueDefinitions[rec.plaqueType];
+                    const left = parseInt(plaque.style.left, 10);
+                    const top = parseInt(plaque.style.top, 10);
+                    const leds = collectLeds(top / cellSize, left / cellSize, def);
+                    if (!leds || leds.length === 0) {
+                        plaque.style.left = prevLeft + 'px';
+                        plaque.style.top = prevTop + 'px';
+                        return;
+                    }
+                    rec.pos = { left, top };
+                    rec.Leds = leds.join(',');
+                    updatePlaqueList();
+                }
+                plaque.addEventListener('mousedown', dragStart);
+                plaque._dragStart = dragStart;
+            }
+
+            function removeDraggable(plaque) {
+                if (plaque._dragStart) {
+                    plaque.removeEventListener('mousedown', plaque._dragStart);
+                    plaque._dragStart = null;
+                }
+            }
+
+            Object.keys(plaqueDefinitions).forEach(type => {
+                const btn = document.createElement('button');
+                btn.innerText = `Add ${type}`;
+                btn.addEventListener('click', () => {
+                    const rc = () => Math.floor(Math.random() * 200 + 55).toString(16).padStart(2, '0');
+                    createPlaque(type, "New Patron " + Math.floor(Math.random() * 9000 + 1000), "", "", "#" + rc() + rc() + rc());
+                });
+                plaquePalette.appendChild(btn);
+            });
+
+            autoLoadPlaques();
+        })();
+    </script>
+    <script>
+        const _tip = document.getElementById('plaque-tooltip');
+        function showPlaqueTip(name, e) {
+            _tip.textContent = name;
+            _tip.style.display = 'block';
+            movePlaqueTip(e);
+        }
+        function movePlaqueTip(e) {
+            _tip.style.left = (e.clientX + 14) + 'px';
+            _tip.style.top  = (e.clientY - 28) + 'px';
+        }
+        function hidePlaqueTip() { _tip.style.display = 'none'; }
+
+        function toggleAnimation() {
+            fetch('/animation/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => updateAnimBtn(d.running))
+                .catch(e => console.error(e));
+        }
+        function updateAnimBtn(running) {
+            const btn = document.getElementById('animBtn');
+            if (running) {
+                btn.textContent = 'Stop Animation';
+                btn.className = 'btn btn-warning btn-sm ms-2';
+            } else {
+                btn.textContent = 'Start Animation';
+                btn.className = 'btn btn-success btn-sm ms-2';
+            }
+        }
+        fetch('/animation/status')
+            .then(r => r.json())
+            .then(d => updateAnimBtn(d.running))
+            .catch(() => {});
+    </script>
+</body>
+</html>
