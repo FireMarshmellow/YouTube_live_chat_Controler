@@ -1,9 +1,10 @@
 import re
+import threading
 import time
 
 from homeassistant_controls import Bubbles, PistonDown, PistonUp, adjust_desk_height
 from sound_board import play_sound
-from storage import load_commands, load_plaques
+from storage import find_plaque, load_commands
 
 access_hierarchy = ["regular", "patreon", "superchat"]
 
@@ -60,22 +61,34 @@ def execute_command(command, display_name, is_superchat=False):
                 print(f"Command {command} is on timeout for {display_name}. Please wait {command_details['timeout'] - time_elapsed:.2f} seconds.")
                 return
 
-        # Execute the command
+        # Start the cooldown before running so a quick repeat can't slip past it
+        last_executed[base_command] = current_time
         print(f"Executing command {command} from {display_name}")
         perform_command_action(command, display_name)
-        last_executed[base_command] = current_time
     else:
         print(f"Command '{command}' is not enabled or does not exist.")
+
+
+def _run_in_background(action, *args):
+    """Run a slow device command off the chat thread so chat keeps flowing."""
+    def runner():
+        try:
+            action(*args)
+        except Exception as e:
+            print(f"Command action {action.__name__} failed: {e}")
+
+    threading.Thread(target=runner, daemon=True).start()
+
 
 # Function to perform the command action (like playing a sound or controlling devices)
 def perform_command_action(command, displayname):
     if command.startswith("!sound_"):
         sound_name = command.split("!sound_")[1]
         sound_name = sound_name.lower()
-        print(f"Attempting to play sound: {sound_name}")
+        print(f"Queueing sound: {sound_name}")
         play_sound(sound_name)
     elif command == "!bubbles":
-        Bubbles()
+        _run_in_background(Bubbles)
     #elif command == "!celebrate":
     #    if displayname == 'pyrohouz':
     #        Birthdaypopper()
@@ -93,32 +106,24 @@ def perform_command_action(command, displayname):
                 return
             if 58 <= desired_height <= 123:
                 print(f"Adjusting desk to height: {desired_height} cm")
-                adjust_desk_height(desired_height)
+                _run_in_background(adjust_desk_height, desired_height)
             else:
                 print(f"Desired height {desired_height} is out of range. Must be between 71 and 120 cm.")
         except ValueError:
             print(f"Invalid desk height specified in command: {command}")
     elif command == "!piston_up":
-        PistonUp()
+        _run_in_background(PistonUp)
     elif command == "!piston_down":
-        PistonDown()
+        _run_in_background(PistonDown)
     else:
         print(f"No action defined for command: {command}")
-
-def load_supporters():
-    return load_plaques()
 
 # Function to get user access level
 def get_user_access_level(display_name, is_superchat=False):
     if is_superchat:  # Bypass for superchat if desired
         return "superchat"
 
-    display_name_lower = display_name.lower()
-    supporters = load_supporters()
-    for supporter in supporters:
-        # Check against both keys. If a second username was added, include it.
-        yt_name = supporter.get("YT_Name", "").lower()
-        twitchusername = supporter.get("twitchusername", "").lower()
-        if display_name_lower in (yt_name, twitchusername):
-            return "patreon"
+    # Same matching as the plaque board: YouTube/Twitch username, then plaque name
+    if find_plaque(display_name):
+        return "patreon"
     return "regular"

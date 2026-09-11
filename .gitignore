@@ -8,3 +8,6 @@ commands.json
 plaques.json
 audio/default.wav
 tokentest.py
+.venv/
+*.tmp
+plaques.backup.json

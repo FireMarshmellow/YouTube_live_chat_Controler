@@ -1,4 +1,10 @@
 import json
+import os
+import re
+import tempfile
+import threading
+import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Dict, List, MutableMapping, MutableSequence
 
@@ -15,21 +21,61 @@ JsonArray = List[Any] | MutableSequence[Any]
 DefaultFactory = Callable[[], Any]
 
 
+FILE_BUSY_RETRIES = 20
+FILE_BUSY_DELAY = 0.05  # seconds
+
+# Windows won't replace a file another thread has open, so reads and saves of
+# the same file take turns. Everything that touches these files runs in this process.
+_locks_guard = threading.Lock()
+_file_locks: Dict[str, threading.Lock] = {}
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    with _locks_guard:
+        return _file_locks.setdefault(os.path.abspath(path), threading.Lock())
+
+
+def _retry_while_busy(operation: Callable[[], Any]) -> Any:
+    """Retry briefly when another program (e.g. antivirus) has the file open."""
+    for attempt in range(FILE_BUSY_RETRIES):
+        try:
+            return operation()
+        except PermissionError:
+            if attempt == FILE_BUSY_RETRIES - 1:
+                raise
+            time.sleep(FILE_BUSY_DELAY)
+
+
 def _read_json(path: Path, default: DefaultFactory | Any) -> Any:
     """
     Read JSON from disk returning a defensive default when the file is missing.
     The default can be either a value or a callable that returns a value.
     """
-    if path.exists():
+    def read():
         with path.open("r", encoding="utf-8") as source:
             return json.load(source)
+
+    with _lock_for(path):
+        if path.exists():
+            return _retry_while_busy(read)
     return default() if callable(default) else default
 
 
 def _write_json(path: Path, payload: Any) -> None:
-    """Persist JSON with utf-8 encoding and a consistent indent."""
-    with path.open("w", encoding="utf-8") as target:
-        json.dump(payload, target, indent=4)
+    """
+    Persist JSON with utf-8 encoding and a consistent indent. Writes go to a
+    temporary file that then replaces the original, so readers never see a
+    half-written file, even if the app stops mid-save.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as target:
+            json.dump(payload, target, indent=4)
+        with _lock_for(path):
+            _retry_while_busy(lambda: os.replace(tmp_name, path))
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
 
 
 def load_secrets() -> JsonDocument:
@@ -79,14 +125,29 @@ def update_plaque(yt_name: str, leds_colour: str, leds: str) -> None:
     save_plaques(plaques)
 
 
+def _normalize_name(name: str | None) -> str:
+    """
+    Lowercase, strip accents and drop everything but letters and digits, so
+    '@Rene_Jensen' matches 'René Jensen' and '@gearscodeandfire' matches 'Gears, Code, and Fire'.
+    """
+    decomposed = unicodedata.normalize("NFKD", name or "")
+    without_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return re.sub(r"[\W_]", "", without_accents).lower()
+
+
 def find_plaque(display_name: str) -> JsonDocument | None:
-    """Return the first plaque that matches a YouTube or Twitch username."""
-    display_name_lower = display_name.lower()
-    for plaque in load_plaques():
-        yt = plaque.get("YT_Name", "").lower()
-        twitch = plaque.get("twitchusername", "").lower()
-        if display_name_lower in (yt, twitch):
-            return plaque
+    """
+    Return the plaque for a chat user. YouTube and Twitch usernames are checked
+    first, then the plaque's display name as a fallback.
+    """
+    target = _normalize_name(display_name)
+    if not target:
+        return None
+    plaques = load_plaques()
+    for field in ("YT_Name", "twitchusername", "name"):
+        for plaque in plaques:
+            if _normalize_name(plaque.get(field)) == target:
+                return plaque
     return None
 
 

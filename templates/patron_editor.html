@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Plaque Board Editor</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #f5f6fa;
+            color: #2f3640;
+            overflow-y: scroll;
+        }
+        .page { max-width: 1600px; margin: 0 auto; padding: 24px 16px; }
+        .nav-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+        }
+        .nav-link-btn {
+            text-decoration: none;
+            padding: 8px 14px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            color: #0d6efd;
+            font-weight: 500;
+            transition: background-color 120ms ease, color 120ms ease;
+        }
+        .nav-link-btn.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+        .nav-spacer { flex: 1; }
+
+        .editor-layout { display: flex; gap: 16px; align-items: flex-start; }
+        .board-col { flex: 1 1 auto; min-width: 0; }
+        .panel-col { flex: 0 0 320px; position: sticky; top: 16px; }
+        @media (max-width: 900px) {
+            .editor-layout { flex-direction: column; align-items: stretch; }
+            .board-col { width: 100%; }
+            .panel-col { flex: none; width: 100%; position: static; }
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        #saveStatus { margin-left: auto; font-size: 13px; }
+
+        .board-scroll { overflow: auto; }
+        #grid {
+            position: relative;
+            display: grid;
+            border: 1px solid #dcdde1;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .grid-cell {
+            border: 1px solid #eceef2;
+            box-sizing: border-box;
+            font-size: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #b8bec8;
+            user-select: none;
+        }
+        .grid-cell.no-led { background: #eef1f5; }
+
+        .plaque {
+            position: absolute;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            border: 2px solid rgba(0,0,0,0.35);
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            transition: opacity 120ms ease, box-shadow 120ms ease;
+        }
+        .plaque span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
+        .plaque.tiny span { display: none; }
+        .plaque:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+        .plaque.selected {
+            z-index: 5;
+            outline: 3px solid #0d6efd;
+            outline-offset: 1px;
+            box-shadow: 0 0 0 6px rgba(13,110,253,0.25);
+        }
+        .plaque.dragging { cursor: grabbing; opacity: 0.85; z-index: 6; }
+        .plaque.invalid { outline: 3px solid #dc3545; box-shadow: 0 0 0 6px rgba(220,53,69,0.25); }
+        .plaque.dimmed { opacity: 0.2; }
+
+        .panel label { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+        .hue-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1;
+            height: 14px;
+            border-radius: 7px;
+            background: linear-gradient(to right,
+                hsl(0,100%,50%),hsl(30,100%,50%),hsl(60,100%,50%),hsl(90,100%,50%),
+                hsl(120,100%,50%),hsl(150,100%,50%),hsl(180,100%,50%),hsl(210,100%,50%),
+                hsl(240,100%,50%),hsl(270,100%,50%),hsl(300,100%,50%),hsl(330,100%,50%),
+                hsl(360,100%,50%));
+            outline: none;
+            cursor: pointer;
+            border: 1px solid #dcdde1;
+        }
+        .hue-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #444;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .hue-slider::-moz-range-thumb {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #444;
+        }
+        .color-swatch { width: 32px; height: 32px; border-radius: 6px; border: 1px solid #dcdde1; flex-shrink: 0; }
+        .result-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; border: 1px solid rgba(0,0,0,0.25); }
+        #searchResults .list-group-item { font-size: 14px; padding: 6px 10px; }
+        kbd { font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div id="plaque-tooltip" style="position:fixed;display:none;background:rgba(0,0,0,0.82);color:#fff;padding:5px 10px;border-radius:6px;font-size:13px;font-weight:500;pointer-events:none;z-index:9999;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>
+    <div class="page">
+        <div class="nav-bar">
+            <a href="{{ url_for('index') }}" class="nav-link-btn {% if request.path == url_for('index') %}active{% endif %}">Home</a>
+            <a href="{{ url_for('editor') }}" class="nav-link-btn {% if request.path == url_for('editor') %}active{% endif %}">PlaqueBoard</a>
+            <a href="{{ url_for('board_settings') }}" class="nav-link-btn {% if request.path == url_for('board_settings') %}active{% endif %}">Board Settings</a>
+            <a href="{{ url_for('manage_secrets') }}" class="nav-link-btn {% if request.path == url_for('manage_secrets') %}active{% endif %}">Secrets</a>
+            <a href="{{ url_for('manage_commands') }}" class="nav-link-btn {% if request.path == url_for('manage_commands') %}active{% endif %}">Commands</a>
+            <span class="nav-spacer"></span>
+            <button id="animBtn" class="btn btn-warning btn-sm" onclick="toggleAnimation()">Stop Animation</button>
+            <button class="btn btn-secondary btn-sm" id="pauseTTSBtn" onclick="togglePause()">Pause TTS</button>
+            <button class="btn btn-danger btn-sm" onclick="skipTTS()">Skip Current TTS</button>
+        </div>
+
+        <div class="editor-layout">
+            <div class="board-col" id="boardCol">
+                <div class="toolbar">
+                    <span class="fw-semibold">Add plaque:</span>
+                    <button class="btn btn-sm btn-primary" data-add="1x1">1×1</button>
+                    <button class="btn btn-sm btn-primary" data-add="2x1">2×1</button>
+                    <button class="btn btn-sm btn-primary" data-add="3x1">3×1</button>
+                    <button class="btn btn-sm btn-primary" data-add="3x2">3×2</button>
+                    <span id="saveStatus" class="text-success">All changes saved</span>
+                </div>
+                <div class="board-scroll">
+                    <div id="grid"></div>
+                </div>
+            </div>
+
+            <div class="panel-col">
+                <div class="card shadow-sm panel">
+                    <div class="card-body">
+                        <label for="search">Find a supporter</label>
+                        <input type="search" id="search" class="form-control" placeholder="Name, YouTube or Twitch" autocomplete="off">
+                        <div id="searchResults" class="list-group mt-2"></div>
+                        <hr>
+
+                        <div id="emptyState" class="text-muted small">
+                            <p class="mb-2">Click a plaque on the board to edit it.</p>
+                            <p class="mb-0">Drag plaques to move them. With one selected, <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> nudge it and <kbd>Esc</kbd> deselects.</p>
+                        </div>
+
+                        <div id="details" hidden>
+                            <div class="d-flex justify-content-between align-items-center mb-3 gap-2">
+                                <h5 class="mb-0 text-truncate" id="detailTitle"></h5>
+                                <span class="badge text-bg-light border" id="detailSize"></span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="fName">Name on plaque</label>
+                                <input type="text" id="fName" class="form-control" autocomplete="off">
+                            </div>
+                            <div class="mb-3">
+                                <label for="fYT">YouTube handle</label>
+                                <input type="text" id="fYT" class="form-control" placeholder="@handle" autocomplete="off">
+                                <div class="form-text">Chat from this handle lights the plaque. Leave blank to match the name above.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="fTwitch">Twitch username</label>
+                                <input type="text" id="fTwitch" class="form-control" autocomplete="off">
+                            </div>
+                            <div class="mb-3">
+                                <label for="fHue">Colour</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="range" id="fHue" class="hue-slider" min="0" max="359">
+                                    <div class="color-swatch" id="fSwatch"></div>
+                                </div>
+                            </div>
+                            <div class="small text-muted mb-3">LEDs: <span id="fLeds"></span></div>
+
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-info flex-grow-1" id="btnTest">Test on board</button>
+                                <button type="button" class="btn btn-outline-danger" id="btnDelete">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function hslToHex(h) {
+            // S=100%, L=50% always — guarantees at least one RGB channel at 255
+            const s = 1, l = 0.5;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => {
+                const k = (n + h / 30) % 12;
+                return Math.round(255 * (l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)))
+                    .toString(16).padStart(2, '0');
+            };
+            return '#' + f(0) + f(8) + f(4);
+        }
+
+        function hueFromHex(hex) {
+            const h = (hex || '#000000').replace('#', '');
+            const r = parseInt(h.slice(0,2),16)/255;
+            const g = parseInt(h.slice(2,4),16)/255;
+            const b = parseInt(h.slice(4,6),16)/255;
+            const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+            if (d === 0) return 0;
+            let hue;
+            if (max === r)      hue = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+            else if (max === g) hue = ((b - r) / d + 2) / 6;
+            else                hue = ((r - g) / d + 4) / 6;
+            return Math.round(hue * 360);
+        }
+
+        function textColorFor(hex) {
+            const h = (hex || '#000000').replace('#', '');
+            const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+            return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1b1f24' : '#ffffff';
+        }
+
+        (function () {
+            const STORE_CELL = 30;  // plaques.json stores pos in 30px cells
+            const SIZES = { "1x1": { w: 1, h: 1 }, "2x1": { w: 2, h: 1 }, "3x1": { w: 3, h: 1 }, "3x2": { w: 3, h: 2 } };
+
+            const grid = document.getElementById('grid');
+            const boardCol = document.getElementById('boardCol');
+            const tip = document.getElementById('plaque-tooltip');
+            const saveStatus = document.getElementById('saveStatus');
+            const searchInput = document.getElementById('search');
+            const searchResults = document.getElementById('searchResults');
+            const emptyState = document.getElementById('emptyState');
+            const details = document.getElementById('details');
+            const fName = document.getElementById('fName');
+            const fYT = document.getElementById('fYT');
+            const fTwitch = document.getElementById('fTwitch');
+            const fHue = document.getElementById('fHue');
+            const fSwatch = document.getElementById('fSwatch');
+            const fLeds = document.getElementById('fLeds');
+
+            let layout = {{ led_layout|tojson|safe }};
+            if (!Array.isArray(layout) || layout.length === 0) {
+                layout = Array.from({ length: 10 }, (_, r) => Array.from({ length: 15 }, (_, c) => r * 15 + c));
+            }
+            const rows = layout.length;
+            const cols = layout[0].length;
+            let cell = STORE_CELL;
+
+            const plaques = [];  // { data, col, row, el }
+            let selected = null;
+
+            // ---------------------------------------------------------------
+            // Board geometry
+            // ---------------------------------------------------------------
+
+            function isCellAvailable(r, c) {
+                return r >= 0 && c >= 0 && r < rows && c < cols && layout[r][c] !== -1;
+            }
+
+            function sizeOf(p) {
+                return SIZES[p.data.plaqueType] || SIZES["1x1"];
+            }
+
+            // LED ids under a plaque at (col,row), or null if it doesn't fit or overlaps another plaque
+            function ledsAt(p, col, row) {
+                const { w, h } = sizeOf(p);
+                const leds = [];
+                for (let r = row; r < row + h; r++) {
+                    for (let c = col; c < col + w; c++) {
+                        if (!isCellAvailable(r, c)) return null;
+                        leds.push(layout[r][c]);
+                    }
+                }
+                const overlaps = plaques.some(o => {
+                    if (o === p) return false;
+                    const s = sizeOf(o);
+                    return col < o.col + s.w && o.col < col + w && row < o.row + s.h && o.row < row + h;
+                });
+                return overlaps || leds.length === 0 ? null : leds;
+            }
+
+            function findFreeSpot(p) {
+                for (let r = 0; r < rows; r++)
+                    for (let c = 0; c < cols; c++)
+                        if (ledsAt(p, c, r)) return { col: c, row: r };
+                return null;
+            }
+
+            function fitCellSize() {
+                const available = boardCol.clientWidth - 2;
+                cell = Math.max(22, Math.min(40, Math.floor(available / cols)));
+                grid.style.width = `${cols * cell}px`;
+                grid.style.height = `${rows * cell}px`;
+                grid.style.gridTemplateColumns = `repeat(${cols}, ${cell}px)`;
+                grid.style.gridTemplateRows = `repeat(${rows}, ${cell}px)`;
+                plaques.forEach(p => place(p, p.col, p.row));
+            }
+
+            function place(p, col, row) {
+                const { w, h } = sizeOf(p);
+                p.el.style.left = `${col * cell + 2}px`;
+                p.el.style.top = `${row * cell + 2}px`;
+                p.el.style.width = `${w * cell - 4}px`;
+                p.el.style.height = `${h * cell - 4}px`;
+            }
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const div = document.createElement('div');
+                    div.className = 'grid-cell' + (layout[r][c] === -1 ? ' no-led' : '');
+                    div.textContent = layout[r][c] === -1 ? '' : layout[r][c];
+                    grid.appendChild(div);
+                }
+            }
+
+            // ---------------------------------------------------------------
+            // Saving — every change is saved automatically
+            // ---------------------------------------------------------------
+
+            let saveTimer = null;
+            let dirty = false;
+
+            function setStatus(text, cls) {
+                saveStatus.textContent = text;
+                saveStatus.className = cls;
+            }
+
+            function serialize() {
+                return plaques.map((p, i) => ({
+                    ...p.data,
+                    id: i + 1,
+                    pos: { left: p.col * STORE_CELL, top: p.row * STORE_CELL },
+                }));
+            }
+
+            function scheduleSave() {
+                dirty = true;
+                setStatus('Saving…', 'text-muted');
+                clearTimeout(saveTimer);
+                saveTimer = setTimeout(saveNow, 500);
+            }
+
+            function saveNow() {
+                clearTimeout(saveTimer);
+                if (!dirty) return;
+                dirty = false;
+                fetch('/plaques', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(serialize()),
+                }).then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    if (!dirty) setStatus('All changes saved', 'text-success');
+                }).catch(err => {
+                    console.error(err);
+                    dirty = true;
+                    setStatus('Save failed, retrying…', 'text-danger');
+                    saveTimer = setTimeout(saveNow, 3000);
+                });
+            }
+
+            window.addEventListener('beforeunload', () => {
+                if (dirty) {
+                    navigator.sendBeacon('/plaques', new Blob([JSON.stringify(serialize())], { type: 'application/json' }));
+                }
+            });
+
+            // ---------------------------------------------------------------
+            // Plaques on the board
+            // ---------------------------------------------------------------
+
+            function refreshLook(p) {
+                const color = p.data.Leds_colour;
+                p.el.style.background = color;
+                p.el.style.color = textColorFor(color);
+                p.el.firstChild.textContent = p.data.name || '';
+            }
+
+            function showTip(p, e) {
+                const handle = p.data.YT_Name ? ` (${p.data.YT_Name})` : '';
+                tip.textContent = (p.data.name || 'Unnamed') + handle;
+                tip.style.display = 'block';
+                moveTip(e);
+            }
+            function moveTip(e) {
+                tip.style.left = (e.clientX + 14) + 'px';
+                tip.style.top = (e.clientY - 30) + 'px';
+            }
+            function hideTip() { tip.style.display = 'none'; }
+
+            function addToBoard(p) {
+                const el = document.createElement('div');
+                el.className = 'plaque' + (sizeOf(p).w === 1 ? ' tiny' : '');
+                el.appendChild(document.createElement('span'));
+                p.el = el;
+                plaques.push(p);
+                refreshLook(p);
+                place(p, p.col, p.row);
+
+                el.addEventListener('mouseenter', e => showTip(p, e));
+                el.addEventListener('mousemove', moveTip);
+                el.addEventListener('mouseleave', hideTip);
+                el.addEventListener('pointerdown', e => startDrag(p, e));
+                grid.appendChild(el);
+            }
+
+            function startDrag(p, e) {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                select(p);
+
+                const el = p.el;
+                const start = { x: e.clientX, y: e.clientY, col: p.col, row: p.row };
+                const { w, h } = sizeOf(p);
+                let moved = false;
+                let target = null;
+                el.setPointerCapture(e.pointerId);
+
+                function onMove(ev) {
+                    const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+                    if (!moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                    moved = true;
+                    hideTip();
+                    el.classList.add('dragging');
+                    const col = Math.max(0, Math.min(cols - w, start.col + Math.round(dx / cell)));
+                    const row = Math.max(0, Math.min(rows - h, start.row + Math.round(dy / cell)));
+                    target = { col, row };
+                    place(p, col, row);
+                    el.classList.toggle('invalid', !ledsAt(p, col, row));
+                }
+
+                function onUp(ev) {
+                    el.releasePointerCapture(ev.pointerId);
+                    el.removeEventListener('pointermove', onMove);
+                    el.removeEventListener('pointerup', onUp);
+                    el.removeEventListener('pointercancel', onUp);
+                    el.classList.remove('dragging', 'invalid');
+                    if (moved && target) moveTo(p, target.col, target.row);
+                    place(p, p.col, p.row);
+                }
+
+                el.addEventListener('pointermove', onMove);
+                el.addEventListener('pointerup', onUp);
+                el.addEventListener('pointercancel', onUp);
+            }
+
+            function moveTo(p, col, row) {
+                const leds = ledsAt(p, col, row);
+                if (!leds) return false;
+                p.col = col;
+                p.row = row;
+                p.data.Leds = leds.join(',');
+                place(p, col, row);
+                if (p === selected) fLeds.textContent = p.data.Leds;
+                scheduleSave();
+                return true;
+            }
+
+            // ---------------------------------------------------------------
+            // Selection + details panel
+            // ---------------------------------------------------------------
+
+            function select(p) {
+                if (selected === p) return;
+                if (selected) selected.el.classList.remove('selected');
+                selected = p;
+                emptyState.hidden = !!p;
+                details.hidden = !p;
+                if (!p) return;
+
+                p.el.classList.add('selected');
+                fName.value = p.data.name || '';
+                fYT.value = p.data.YT_Name || '';
+                fTwitch.value = p.data.twitchusername || '';
+                fHue.value = hueFromHex(p.data.Leds_colour);
+                fSwatch.style.background = p.data.Leds_colour;
+                fLeds.textContent = p.data.Leds;
+                document.getElementById('detailTitle').textContent = p.data.name || 'Unnamed plaque';
+                document.getElementById('detailSize').textContent = p.data.plaqueType.replace('x', '×');
+            }
+
+            function bindField(input, field, onChange) {
+                input.addEventListener('input', () => {
+                    if (!selected) return;
+                    selected.data[field] = input.value;
+                    if (onChange) onChange(selected);
+                    scheduleSave();
+                });
+            }
+
+            bindField(fName, 'name', p => {
+                refreshLook(p);
+                document.getElementById('detailTitle').textContent = p.data.name || 'Unnamed plaque';
+                renderSearch();
+            });
+            bindField(fYT, 'YT_Name', renderSearch);
+            bindField(fTwitch, 'twitchusername', renderSearch);
+
+            fHue.addEventListener('input', () => {
+                if (!selected) return;
+                selected.data.Leds_colour = hslToHex(parseInt(fHue.value, 10));
+                fSwatch.style.background = selected.data.Leds_colour;
+                refreshLook(selected);
+                scheduleSave();
+            });
+
+            document.getElementById('btnTest').addEventListener('click', e => {
+                if (!selected) return;
+                const btn = e.currentTarget;
+                fetch('/trigger_leds', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ Leds: selected.data.Leds, Leds_colour: selected.data.Leds_colour }),
+                }).then(r => r.json()).then(d => {
+                    btn.textContent = d.status === 'success' ? 'Sent to board ✓' : 'Test failed';
+                }).catch(() => {
+                    btn.textContent = 'Test failed';
+                }).finally(() => {
+                    setTimeout(() => { btn.textContent = 'Test on board'; }, 2000);
+                });
+            });
+
+            document.getElementById('btnDelete').addEventListener('click', () => {
+                if (!selected) return;
+                if (!confirm(`Delete the plaque for "${selected.data.name || 'Unnamed'}"?`)) return;
+                const p = selected;
+                select(null);
+                p.el.remove();
+                plaques.splice(plaques.indexOf(p), 1);
+                renderSearch();
+                scheduleSave();
+            });
+
+            grid.addEventListener('pointerdown', e => {
+                if (e.target === grid || e.target.classList.contains('grid-cell')) select(null);
+            });
+
+            document.addEventListener('keydown', e => {
+                const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+                if (typing) {
+                    if (e.key === 'Escape') document.activeElement.blur();
+                    return;
+                }
+                if (!selected) return;
+                const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+                if (step) {
+                    e.preventDefault();
+                    moveTo(selected, selected.col + step[0], selected.row + step[1]);
+                } else if (e.key === 'Escape') {
+                    select(null);
+                }
+            });
+
+            // ---------------------------------------------------------------
+            // Search
+            // ---------------------------------------------------------------
+
+            function matches(p, q) {
+                return [p.data.name, p.data.YT_Name, p.data.twitchusername]
+                    .some(v => (v || '').toLowerCase().includes(q));
+            }
+
+            function renderSearch() {
+                const q = searchInput.value.trim().toLowerCase();
+                searchResults.replaceChildren();
+                plaques.forEach(p => p.el.classList.toggle('dimmed', !!q && !matches(p, q)));
+                if (!q) return;
+
+                const found = plaques.filter(p => matches(p, q));
+                found.slice(0, 8).forEach(p => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'list-group-item list-group-item-action text-truncate';
+                    const dot = document.createElement('span');
+                    dot.className = 'result-dot';
+                    dot.style.background = p.data.Leds_colour;
+                    item.append(dot, p.data.name || 'Unnamed');
+                    if (p.data.YT_Name) {
+                        const handle = document.createElement('small');
+                        handle.className = 'text-muted ms-1';
+                        handle.textContent = p.data.YT_Name;
+                        item.append(handle);
+                    }
+                    item.addEventListener('click', () => {
+                        select(p);
+                        p.el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                    });
+                    searchResults.appendChild(item);
+                });
+                if (found.length === 0) {
+                    const none = document.createElement('div');
+                    none.className = 'list-group-item text-muted small';
+                    none.textContent = 'No matches';
+                    searchResults.appendChild(none);
+                } else if (found.length > 8) {
+                    const more = document.createElement('div');
+                    more.className = 'list-group-item text-muted small';
+                    more.textContent = `${found.length - 8} more, keep typing`;
+                    searchResults.appendChild(more);
+                }
+            }
+
+            searchInput.addEventListener('input', renderSearch);
+            searchInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    const first = searchResults.querySelector('button');
+                    if (first) first.click();
+                }
+            });
+
+            // ---------------------------------------------------------------
+            // Adding plaques
+            // ---------------------------------------------------------------
+
+            document.querySelectorAll('[data-add]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const p = {
+                        data: {
+                            plaqueType: btn.dataset.add,
+                            name: 'New Patron ' + Math.floor(Math.random() * 9000 + 1000),
+                            YT_Name: '',
+                            twitchusername: '',
+                            Leds_colour: hslToHex(Math.floor(Math.random() * 360)),
+                            Leds: '',
+                        },
+                        col: 0,
+                        row: 0,
+                    };
+                    const spot = findFreeSpot(p);
+                    if (!spot) {
+                        alert(`There's no free space on the board for a ${btn.dataset.add.replace('x', '×')} plaque.`);
+                        return;
+                    }
+                    p.col = spot.col;
+                    p.row = spot.row;
+                    p.data.Leds = ledsAt(p, spot.col, spot.row).join(',');
+                    addToBoard(p);
+                    select(p);
+                    p.el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                    fName.focus();
+                    fName.select();
+                    scheduleSave();
+                });
+            });
+
+            // ---------------------------------------------------------------
+            // Load
+            // ---------------------------------------------------------------
+
+            fitCellSize();
+            const initial = {{ data|tojson|safe }};
+            const needsSpot = [];
+            (Array.isArray(initial) ? initial : []).forEach(item => {
+                const data = { ...item };
+                data.plaqueType = SIZES[data.plaqueType] ? data.plaqueType : '1x1';
+                data.name = data.name || '';
+                data.YT_Name = data.YT_Name || data.username || '';
+                data.twitchusername = data.twitchusername || '';
+                data.Leds_colour = data.Leds_colour || data.color || '#aabbcc';
+                data.Leds = data.Leds || '';
+                const p = { data, col: 0, row: 0 };
+                if (item.pos) {
+                    p.col = Math.round(item.pos.left / STORE_CELL);
+                    p.row = Math.round(item.pos.top / STORE_CELL);
+                    addToBoard(p);
+                } else {
+                    needsSpot.push(p);
+                }
+            });
+            needsSpot.forEach(p => {
+                const spot = findFreeSpot(p) || { col: 0, row: 0 };
+                p.col = spot.col;
+                p.row = spot.row;
+                addToBoard(p);
+            });
+
+            let resizeTimer = null;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(fitCellSize, 100);
+            });
+        })();
+    </script>
+    <script>
+        function toggleAnimation() {
+            fetch('/animation/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => updateAnimBtn(d.running))
+                .catch(e => console.error(e));
+        }
+        function updateAnimBtn(running) {
+            const btn = document.getElementById('animBtn');
+            if (running) {
+                btn.textContent = 'Stop Animation';
+                btn.className = 'btn btn-warning btn-sm';
+            } else {
+                btn.textContent = 'Start Animation';
+                btn.className = 'btn btn-success btn-sm';
+            }
+        }
+        fetch('/animation/status')
+            .then(r => r.json())
+            .then(d => updateAnimBtn(d.running))
+            .catch(() => {});
+
+        function skipTTS() {
+            fetch('/skip_tts', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => console.log('TTS Skipped:', d))
+                .catch(e => console.error('Error skipping TTS:', e));
+        }
+        function togglePause() {
+            fetch('/pause_tts', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => updatePauseButton(d.paused))
+                .catch(e => console.error('Error toggling TTS pause:', e));
+        }
+        function updatePauseButton(paused) {
+            const btn = document.getElementById('pauseTTSBtn');
+            if (!btn) return;
+            btn.classList.toggle('btn-warning', paused);
+            btn.classList.toggle('btn-secondary', !paused);
+            btn.textContent = paused ? 'Resume TTS' : 'Pause TTS';
+        }
+        fetch('/tts_status')
+            .then(r => r.json())
+            .then(d => updatePauseButton(d.paused))
+            .catch(() => {});
+    </script>
+</body>
+</html>

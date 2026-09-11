@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Board Settings</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .nav-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 24px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+        }
+        .nav-link-btn {
+            text-decoration: none;
+            padding: 8px 14px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            color: #0d6efd;
+            font-weight: 500;
+        }
+        .nav-link-btn.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="nav-bar">
+            <a href="{{ url_for('index') }}" class="nav-link-btn {% if request.path == url_for('index') %}active{% endif %}">Home</a>
+            <a href="{{ url_for('editor') }}" class="nav-link-btn {% if request.path == url_for('editor') %}active{% endif %}">PlaqueBoard</a>
+            <a href="{{ url_for('board_settings') }}" class="nav-link-btn {% if request.path == url_for('board_settings') %}active{% endif %}">Board Settings</a>
+            <a href="{{ url_for('manage_secrets') }}" class="nav-link-btn {% if request.path == url_for('manage_secrets') %}active{% endif %}">Secrets</a>
+            <a href="{{ url_for('manage_commands') }}" class="nav-link-btn {% if request.path == url_for('manage_commands') %}active{% endif %}">Commands</a>
+        </div>
+    </div>
+    <div class="container" style="max-width: 540px;">
+        <form method="POST">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">LED Board</h5>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Board IP</label>
+                        <input type="text" name="board_ip" class="form-control"
+                               value="{{ board_ip }}" placeholder="http://192.168.1.100" />
+                        <div class="form-text">Full URL to your WLED board, e.g. <code>http://192.168.1.100</code></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">WLED Segment ID</label>
+                        <input type="number" name="segment_id" class="form-control"
+                               value="{{ segment_id }}" min="0" placeholder="1" />
+                        <div class="form-text">Which WLED segment the patron LEDs belong to. Use 0 for a dedicated single-strip ESP32.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Animation</h5>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Active slots <span id="slotsVal" class="text-primary">{{ num_slots }}</span></label>
+                        <input type="range" name="num_slots" class="form-range"
+                               min="1" max="{{ max_slots }}" step="1" value="{{ num_slots }}"
+                               oninput="document.getElementById('slotsVal').textContent = this.value" />
+                        <div class="form-text">How many patrons animate simultaneously (1–{{ max_slots }}).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Hold duration <span id="holdVal" class="text-primary">{{ hold_secs | int }}s</span></label>
+                        <input type="range" name="hold_secs" class="form-range"
+                               min="0" max="30" step="1" value="{{ hold_secs | int }}"
+                               oninput="document.getElementById('holdVal').textContent = this.value + 's'" />
+                        <div class="form-text">Seconds each patron stays at full brightness before fading out (0 = no hold).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Fade steps <span id="stepsVal" class="text-primary">{{ fade_steps }}</span></label>
+                        <input type="range" name="fade_steps" class="form-range"
+                               min="4" max="200" step="4" value="{{ fade_steps }}"
+                               oninput="document.getElementById('stepsVal').textContent = this.value" />
+                        <div class="form-text">More steps = smoother fade. Total fade time = steps × step delay.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Step delay <span id="delayVal" class="text-primary">{{ "%.2f"|format(step_delay) }}s</span></label>
+                        <input type="range" name="step_delay" class="form-range"
+                               min="0.01" max="0.5" step="0.01" value="{{ step_delay }}"
+                               oninput="document.getElementById('delayVal').textContent = parseFloat(this.value).toFixed(2) + 's'" />
+                        <div class="form-text">Pause between brightness steps. Lower = faster fade, but more HTTP traffic.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Chat Highlight</h5>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Highlight duration <span id="chatVal" class="text-primary">{{ chat_highlight_secs | int }}s</span></label>
+                        <input type="range" name="chat_highlight_secs" class="form-range"
+                               min="1" max="60" step="1" value="{{ chat_highlight_secs | int }}"
+                               oninput="document.getElementById('chatVal').textContent = this.value + 's'" />
+                        <div class="form-text">When a patron chats, their plaque flashes and stays lit this long. Chatting again keeps it lit.</div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</body>
+</html>

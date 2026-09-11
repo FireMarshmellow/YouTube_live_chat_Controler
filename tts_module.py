@@ -1,4 +1,5 @@
 import os
+import subprocess
 import traceback
 import pygame
 import time
@@ -6,8 +7,13 @@ import threading
 import queue
 import pyttsx3
 import atexit
+from pathlib import Path
 
-# Initialize the TTS queue and state flags
+BASE_DIR = Path(__file__).resolve().parent
+SAY_EXE = BASE_DIR / "say.exe"
+AUDIO_DIR = BASE_DIR / "audio"
+
+# One queue for TTS and sound effects so they play in order and never overlap
 tts_queue = queue.Queue()
 stop_event = threading.Event()
 pause_event = threading.Event()
@@ -15,17 +21,17 @@ pause_event = threading.Event()
 def create_engine():
     """Create a new pyttsx3 engine instance."""
     engine = pyttsx3.init()
-    engine.setProperty("voice", 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_DAVID_11.0')
+    engine.setProperty("voice", r'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_DAVID_11.0')
     return engine
 
 def _tts_worker():
-    """Worker thread to process TTS requests from the queue."""
+    """Worker thread that plays queued TTS messages and sound effects one at a time."""
     while True:
         item = tts_queue.get()  # Get the next item from the queue
         if item is None:  # Stop signal
             break
 
-        text, newtts = item  # Unpack the text and newtts flag
+        kind, payload, newtts = item
         try:
             # Wait while paused, but allow stop to interrupt
             while pause_event.is_set() and not stop_event.is_set():
@@ -34,12 +40,15 @@ def _tts_worker():
             if stop_event.is_set():
                 continue
 
-            print(f"Processing text: {text}, newtts={newtts}")
-            
-            if newtts:
-                _play_newtts(text)
+            if kind == "sound":
+                print(f"Playing sound: {Path(payload).name}")
+                _play_audio_file(payload)
             else:
-                _play_oldtts(text)
+                print(f"Processing text: {payload}, newtts={newtts}")
+                if newtts:
+                    _play_newtts(payload)
+                else:
+                    _play_oldtts(payload)
 
         except Exception as e:
             print(f"Error during TTS playback: {e}")
@@ -49,7 +58,12 @@ def _tts_worker():
 
 def gotts(text, newtts=True):
     """Add a TTS request to the queue with a 'newtts' flag."""
-    tts_queue.put((text, newtts))  # Queue the text with the newtts attribute
+    tts_queue.put(("tts", text, newtts))
+
+
+def queue_sound(sound_path):
+    """Queue a sound effect to play after whatever is already queued."""
+    tts_queue.put(("sound", str(sound_path), None))
 
 
 def stop_tts_worker():
@@ -64,23 +78,34 @@ def _play_oldtts(text_to_say, session="default"):
     if stop_event.is_set():
         return
 
-    wav_path = f"./audio/{session}.wav"
+    wav_path = AUDIO_DIR / f"{session}.wav"
 
     try:
-        os.makedirs("./audio", exist_ok=True)
+        os.makedirs(AUDIO_DIR, exist_ok=True)
 
-        # Run the speech synthesis command
-        command = f'say.exe -w "{wav_path}" "[:PHONE ON]{text_to_say}"'
-        os.system(command)
+        # Pass chat text as a single argument with no shell, so quotes or
+        # characters like & in a message can't run other commands
+        subprocess.run(
+            [str(SAY_EXE), "-w", str(wav_path), f"[:PHONE ON]{text_to_say}"],
+            cwd=BASE_DIR,
+            check=False,
+        )
 
-        pygame.mixer.init()
-        pygame.mixer.music.load(wav_path)
-        pygame.mixer.music.play()
-
-        _wait_for_audio()
+        _play_audio_file(wav_path)
 
     except Exception as e:
         traceback.print_exc()
+
+
+def _play_audio_file(path):
+    """Play a WAV or MP3 file and wait until it finishes or is skipped."""
+    if stop_event.is_set():
+        return
+
+    pygame.mixer.init()
+    pygame.mixer.music.load(str(path))
+    pygame.mixer.music.play()
+    _wait_for_audio()
 
 def _play_newtts(text_to_say, session="default"):
     """Convert text to speech and play it without blocking."""

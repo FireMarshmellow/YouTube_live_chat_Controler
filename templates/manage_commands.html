@@ -89,6 +89,7 @@
         <div class="nav-bar">
             <a href="{{ url_for('index') }}" class="nav-link-btn {% if request.path == url_for('index') %}active{% endif %}">Home</a>
             <a href="{{ url_for('editor') }}" class="nav-link-btn {% if request.path == url_for('editor') %}active{% endif %}">PlaqueBoard</a>
+            <a href="{{ url_for('board_settings') }}" class="nav-link-btn {% if request.path == url_for('board_settings') %}active{% endif %}">Board Settings</a>
             <a href="{{ url_for('manage_secrets') }}" class="nav-link-btn {% if request.path == url_for('manage_secrets') %}active{% endif %}">Secrets</a>
             <a href="{{ url_for('manage_commands') }}" class="nav-link-btn {% if request.path == url_for('manage_commands') %}active{% endif %}">Commands</a>
             <span class="nav-spacer"></span>
